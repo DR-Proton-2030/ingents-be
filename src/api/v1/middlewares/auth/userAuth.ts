@@ -1,0 +1,18 @@
+import { NextFunction, Request, Response } from "express";
+import { verifyToken } from "../../../../services/verifyToken/verifyToken.service";
+
+export const userAuth = (req: Request, res: Response, next: NextFunction) => {
+	const token = req.cookies?.token || req.header("Authorization")?.replace("Bearer ", "");
+	if (!token) {
+		res.status(401).json({ message: "Unauthorized" });
+		return;
+	}
+	try {
+		const decoded = verifyToken(token);
+		req.user = decoded; // Attach user data to request
+		next();
+	} catch (error) {
+		res.status(403).json({ message: "Invalid token" });
+		return;
+	}
+};
