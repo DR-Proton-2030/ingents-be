@@ -67,6 +67,7 @@ npm run start:dev
 ## Version Management & Release Process
 
 **Git Tagging System:**
+
 ```bash
 # Create a new release tag
 git tag -a v1.x.x -m "Release v1.x.x: Description of changes"
@@ -83,11 +84,13 @@ git push origin --delete v1.x.x
 ```
 
 **Semantic Versioning Convention:**
+
 - `v1.0.0` - Major release (breaking changes)
 - `v1.1.0` - Minor release (new features, backward compatible)
 - `v1.1.1` - Patch release (bug fixes)
 
 **Release Workflow:**
+
 1. Complete development work on feature branch
 2. Merge to main branch via PR
 3. Update version in `package.json`
@@ -115,7 +118,7 @@ Key environment variables in `.env`:
 
 - All routes require explicit middleware chaining: `userAuth, upload, fileUploadHelper, controller`
 - Error responses follow `{ message: string, error?: any }` structure
-- Success responses use `{ message: string, data: object }` structure  
+- Success responses use `{ message: string, data: object }` structure
 - Database queries use `.populate()` for virtual references (see `company_details` in user schema)
 - All async operations include comprehensive error handling with transaction rollback
 
@@ -124,6 +127,7 @@ Key environment variables in `.env`:
 **Format:** `type(scope): description`
 
 **Types:**
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation changes
@@ -133,6 +137,7 @@ Key environment variables in `.env`:
 - `chore`: Maintenance tasks
 
 **Examples:**
+
 ```bash
 git commit -m "feat(auth): add Google OAuth integration"
 git commit -m "fix(upload): handle S3 upload timeout errors"

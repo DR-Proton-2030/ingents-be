@@ -12,6 +12,7 @@ import { NODE_ENV } from "../../../../config/config";
 import { callMailServer } from "../../../../services/callMailServer/callMailServer";
 
 export const signUp = async (req: Request, res: Response) => {
+  console.log("=========> Req Body:", req.body);
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -54,10 +55,10 @@ export const signUp = async (req: Request, res: Response) => {
     await session.commitTransaction();
     session.endSession();
 
-    await callMailServer("welcome", {
-    	email: user_details.email,
-    	userName: user_details.full_name || "There",
-    });
+    // await callMailServer("welcome", {
+    //   email: user_details.email,
+    //   userName: user_details.full_name || "There",
+    // });
     const tokenPayload: ItokenPayload = {
       company_object_id: String(companyInstance._id),
       _id: String(userInstance._id),
@@ -74,10 +75,10 @@ export const signUp = async (req: Request, res: Response) => {
       domain: NODE_ENV === "production" ? ".bidready.com" : "localhost", // Set domain for production
     });
 
-	const userDetails = {
-		...userInstance.toObject(),
-		company_details: companyInstance.toObject(),
-	};
+    const userDetails = {
+      ...userInstance.toObject(),
+      company_details: companyInstance.toObject(),
+    };
 
     return res.status(200).json({
       message: "User created successfully",
@@ -93,12 +94,14 @@ export const signUp = async (req: Request, res: Response) => {
 };
 
 export const signIn = async (req: Request, res: Response) => {
+  console.log("==========> Req Body:", req.body);
   try {
     const { email, password } = req.body;
     const user: any = await UserModel.findOne({ email }).populate(
       "company_details"
     );
     if (!user) {
+      console.log("User not found");
       return res.status(404).json({ message: "User not found" });
     }
     const isMatchPassword = await comparePassword(password, user.password);
@@ -113,7 +116,7 @@ export const signIn = async (req: Request, res: Response) => {
     const token: string = generateToken(tokenPayload);
     delete user.password; // Remove password from response
 
-	res.cookie("token", token, {
+    res.cookie("token", token, {
       httpOnly: true, // Prevents JavaScript access (XSS protection)
       secure: NODE_ENV === "production", // Use secure cookies in production
       sameSite: NODE_ENV === "production" ? "none" : "lax",
@@ -121,7 +124,7 @@ export const signIn = async (req: Request, res: Response) => {
       maxAge: 3 * 60 * 60 * 1000, // 3 hours expiration
       domain: NODE_ENV === "production" ? ".bidready.com" : "localhost", // Set domain for production
     });
-
+    console.log("====> User logged in:", user);
     return res.status(200).json({
       message: "User logged in successfully",
       data: {
@@ -137,7 +140,7 @@ export const signIn = async (req: Request, res: Response) => {
 export const verifyToken = async (req: Request, res: Response) => {
   try {
     const { _id, company_object_id } = req.user;
-	console.log("user", _id, company_object_id);
+    console.log("user", _id, company_object_id);
     const user = await UserModel.findById(_id).populate("company_details");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -245,7 +248,7 @@ export const logoutUser = async (req: Request, res: Response) => {
       secure: NODE_ENV === "production", // Use secure cookies in production
       sameSite: NODE_ENV === "production" ? "none" : "lax",
       path: "/", // Makes cookie accessible across the entire app
-      domain: NODE_ENV === "production" ? '.bidready.com' : 'localhost',
+      domain: NODE_ENV === "production" ? ".bidready.com" : "localhost",
     });
     res.status(200).json({
       message: "User logged out successfully",
