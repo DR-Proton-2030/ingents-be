@@ -6,8 +6,9 @@ import { ICompany } from "../../types/interface/company.interface";
 const companySchema: Schema<ICompany> = new Schema<ICompany>(
 	{
 		company_name: SCHEMA_DEFINITION_PROPERTY.requiredString,
-		website: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+		website: SCHEMA_DEFINITION_PROPERTY.requiredString,
 		logo: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+		
 	},
 	{
 		...GENERAL_SCHEMA_OPTIONS,

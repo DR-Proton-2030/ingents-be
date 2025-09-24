@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRouter from "./api/v1/routes/auth/auth.routes";
+import fileHandleRouter from "./api/v1/routes/fileHandling/fileHandling.routes"
 const app = express();
 
 app.use(cookieParser());
@@ -32,6 +33,7 @@ app.options("*", (req, res) => {
 
 // Routes
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/fileHandling", fileHandleRouter);
 
 // Default route for health check
 app.get("/", (req, res) => {
