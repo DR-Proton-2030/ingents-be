@@ -15,8 +15,6 @@ export const handleUploadedFile = async (req: Request, res: Response) => {
   const session = await mongoose.startSession();
   try {
     session.startTransaction();
-
-
     let workbook;
 
     if (req.file) {
@@ -50,7 +48,6 @@ export const handleUploadedFile = async (req: Request, res: Response) => {
         const response = await axios.get(exportUrl);
         workbook = XLSX.read(response.data, { type: "string" });
       }
-      // 🟢 Handle direct Excel/CSV file links
       else {
         const response = await axios.get(fileUrl, {
           responseType: "arraybuffer",

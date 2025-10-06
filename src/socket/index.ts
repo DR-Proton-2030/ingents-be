@@ -1,39 +1,3 @@
-// import { Server } from "socket.io";
-// import type { Server as HttpServer } from "http";
-
-// export default function initSocket(server: HttpServer) {
-//   const io = new Server(server, {
-//     cors: {
-//       origin: "http://localhost:3000",
-//       methods: ["GET", "POST"],
-//     },
-//   });
-
-//   io.on("connection", (socket) => {
-//     console.log("✅ Socket connected:", socket.id);
-
-//     socket.on("joinRoom", (room: string) => {
-//       socket.join(room);
-//       socket.on("sendMessage", ({ room, msg }) => {
-//         console.log(`💬 Message from ${socket.id} in room ${room}:`, msg);
-//         io.to(room).emit("message", { from: socket.id, msg });
-//       });
-//     });
-
-//     socket.on("sendMessage", ({ room, msg }) => {
-//       io.to(room).emit("message", { from: socket.id, msg });
-//     });
-
-//     socket.on("disconnect", () => {
-//       console.log("❌ Socket disconnected:", socket.id);
-//     });
-//   });
-
-//   return io;
-// }
-
-
-
 import { Server } from "socket.io";
 import type { Server as HttpServer } from "http";
 import ChatMessageModel from "../models/message/message.model";

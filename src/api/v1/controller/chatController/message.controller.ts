@@ -2,29 +2,48 @@ import { Request, Response } from "express";
 import mongoose, { Types } from "mongoose";
 import ChatSessionModel from "../../../../models/chatSession/chatSession.model";
 import ChatMessageModel from "../../../../models/message/message.model";
+import { handleUploadedFile } from "../fileHandling/fileHandling.controller";
 
-// Send a new message
+
 export const sendMessage = async (req: Request, res: Response) => {
   const session = await mongoose.startSession();
   try {
     session.startTransaction();
 
     const userId = new Types.ObjectId(req.user._id);
-    const { chatId, sender, content, files } = req.body;
+    const { chatId, sender, content, files, fileUrl } = req.body;
 
     const chat = await ChatSessionModel.findOne({ _id: chatId, userId });
     if (!chat) return res.status(403).json({ error: "Access denied" });
 
-    // Create new message
+    if ((files && files.length > 0) || fileUrl) {
+      if (files && files.length > 0) {
+        const firstFile = files[0];
+        req.file = {
+          fieldname: "file",
+          originalname: firstFile.name,
+          mimetype: firstFile.type,
+          buffer: Buffer.from(firstFile.data, "base64"),
+          size: firstFile.size,
+        } as any;
+      }
+
+      req.body.chatId = chatId;
+      req.body.sender = sender;
+
+      const result = await handleUploadedFile(req, res);
+      await session.commitTransaction();
+      return result;
+    }
+
     const message = await ChatMessageModel.create(
-      [{ chatId, sender, content, files }],
+      [{ chatId, sender, content, files: [] }],
       { session }
     );
 
-    // If this is the first user message, update chat title
     if (!chat.title || chat.title === "New Chat") {
       if (sender === "user") {
-        chat.title = content.slice(0, 50); // use first 50 chars as title
+        chat.title = content.slice(0, 50);
         await chat.save({ session });
       }
     }
