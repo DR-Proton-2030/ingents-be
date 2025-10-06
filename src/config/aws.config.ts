@@ -10,6 +10,6 @@ export const s3Client = new S3Client({
 	credentials: credential,
 });
 
-export const s3Url = "https://bidready.s3.ap-south-1.amazonaws.com";
+export const s3Url = "https://ingents.s3.ap-south-1.amazonaws.com";
 
-export const bucketName = "bidready";
+export const bucketName = "ingents";

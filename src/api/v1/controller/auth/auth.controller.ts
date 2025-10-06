@@ -72,7 +72,7 @@ export const signUp = async (req: Request, res: Response) => {
       sameSite: NODE_ENV === "production" ? "none" : "lax",
       path: "/", // Makes cookie accessible across the entire app
       maxAge: 3 * 60 * 60 * 1000, // 3 hours expiration
-      domain: NODE_ENV === "production" ? ".bidready.com" : "localhost", // Set domain for production
+      domain: NODE_ENV === "production" ? ".ingents.ai" : "localhost", // Set domain for production
     });
 
     const userDetails = {
