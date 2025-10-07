@@ -1,20 +1,14 @@
 import OpenAI from "openai";
-import { MyCompanyInfo, CompanyDetails } from "../../../../types/interface/openai.interface";
-import { emailPrompt } from "../../../../prompts/emailPrompt";
 
 const openai = new OpenAI({
   apiKey: process.env.OPEN_AI_API_KEY,
 });
 
-const systemMessage =
-  "You are a senior marketing strategist and professional email copywriter. You specialize in writing personalized cold emails that maximize engagement and response rates. Always output in valid JSON format only.";
-
-export const generateEmailBody = async (
-  companyDetails: CompanyDetails,
-  myCompanyInfo: MyCompanyInfo
+export const generateOpenAiResponse = async (
+    prompt: string,
+    systemMessage: string
 ) => {
   try {
-    const prompt = emailPrompt(companyDetails, myCompanyInfo);
 
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
@@ -38,8 +32,7 @@ export const generateEmailBody = async (
     // Return both the generated email and the prompt
     return {
       prompt,
-      subject: parsedContent.subject,
-      body: parsedContent.body,
+      parsedContent,
     };
   } catch (err) {
     console.error("OpenAI request failed:", err);

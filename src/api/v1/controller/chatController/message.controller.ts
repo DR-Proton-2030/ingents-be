@@ -1,60 +1,29 @@
 import { Request, Response } from "express";
-import mongoose, { Types } from "mongoose";
-import ChatSessionModel from "../../../../models/chatSession/chatSession.model";
-import ChatMessageModel from "../../../../models/message/message.model";
-import { handleUploadedFile } from "../fileHandling/fileHandling.controller";
-
+import { bulkEmailFromExcel } from "../../../../services/agents/email/bulkEmailFromExcel.service";
 
 export const sendMessage = async (req: Request, res: Response) => {
-  const session = await mongoose.startSession();
   try {
-    session.startTransaction();
-
-    const userId = new Types.ObjectId(req.user._id);
-    const { chatId, sender, content, files, fileUrl } = req.body;
-
-    const chat = await ChatSessionModel.findOne({ _id: chatId, userId });
-    if (!chat) return res.status(403).json({ error: "Access denied" });
-
-    if ((files && files.length > 0) || fileUrl) {
-      if (files && files.length > 0) {
-        const firstFile = files[0];
-        req.file = {
-          fieldname: "file",
-          originalname: firstFile.name,
-          mimetype: firstFile.type,
-          buffer: Buffer.from(firstFile.data, "base64"),
-          size: firstFile.size,
-        } as any;
-      }
-
-      req.body.chatId = chatId;
-      req.body.sender = sender;
-
-      const result = await handleUploadedFile(req, res);
-      await session.commitTransaction();
-      return result;
+    // Extract excel file from req.file
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ message: "Excel file is required" });
     }
 
-    const message = await ChatMessageModel.create(
-      [{ chatId, sender, content, files: [] }],
-      { session }
-    );
+    // Import bulkEmailFromExcel dynamically to avoid circular deps
+    // Prepare company info (can be extended as needed)
+    const myInfo = {
+      my_company_name: req.body.my_company_name || req.user?.company_details?.company_name || "",
+      my_company_website: req.body.my_company_website || req.user?.company_details?.company_website || ""
+    };
 
-    if (!chat.title || chat.title === "New Chat") {
-      if (sender === "user") {
-        chat.title = content.slice(0, 50);
-        await chat.save({ session });
-      }
-    }
+    // Call bulkEmailFromExcel
+    const result = await bulkEmailFromExcel(req.file.buffer, myInfo);
 
-    await session.commitTransaction();
-    return res.status(201).json(message[0]);
-  } catch (err) {
-    console.error("Error sending message:", err);
-    await session.abortTransaction();
-    return res.status(500).json({ error: "Failed to send message" });
-  } finally {
-    session.endSession();
+    res.status(200).json({
+      message: "Bulk email generation successful",
+      data: result
+    });
+  } catch (error) {
+    console.error("Error in sendMessage:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
-};
+}
