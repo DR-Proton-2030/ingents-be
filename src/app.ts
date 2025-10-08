@@ -2,6 +2,10 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRouter from "./api/v1/routes/auth/auth.routes";
+// import messageRouter from "./api/v1/routes/messages/messages.routes";
+import purchasedEmailTemplateRouter from "./api/v1/routes/purchasedEmailTemplate/purchasedEmailTemplate.routes";
+import sentEmailRouter from "./api/v1/routes/sentEmail/sentEmail.routes";
+import emailTemplateRouter from "./api/v1/routes/emailTemplate/emailTemplate.routes";
 import messageRouter from "./api/v1/routes/messages/messages.routes";
 const app = express();
 
@@ -34,6 +38,9 @@ app.options("*", (req, res) => {
 // Routes
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/messages", messageRouter);
+app.use("/api/v1/purchased-email-templates", purchasedEmailTemplateRouter);
+app.use("/api/v1/sent-emails", sentEmailRouter);
+app.use("/api/v1/email-templates", emailTemplateRouter);
 
 // Default route for health check
 app.get("/", (req, res) => {
