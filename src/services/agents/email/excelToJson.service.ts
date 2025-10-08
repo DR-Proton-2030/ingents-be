@@ -16,12 +16,36 @@ export const convertExcelToJson = (
     }
     
     const sheet = workbook.Sheets[sheetName];
-    const jsonData: any[] = xlsx.utils.sheet_to_json(sheet, {
-      header: headerRow,
+    
+    // Get the headers first
+    const headers = getExcelColumns(excelBuffer, sheetIndex);
+    console.log("Headers extracted:", headers);
+    
+    // Convert to JSON using the first row as headers
+    const rawJsonData: any[] = xlsx.utils.sheet_to_json(sheet, {
+      header: 1, // Use first row as headers
       defval: "", // Default value for empty cells
+      range: 1 // Skip first row since it contains headers
     });
 
-    return jsonData;
+    console.log(`Raw Excel data rows: ${rawJsonData.length}`);
+
+    // Transform the data to use proper header names instead of numeric indices
+    const transformedData = rawJsonData.map(row => {
+      const newRow: any = {};
+      headers.forEach((header, index) => {
+        const trimmedHeader = header.trim();
+        newRow[trimmedHeader] = row[index] || "";
+      });
+      return newRow;
+    });
+
+    console.log(`Transformed data rows: ${transformedData.length}`);
+    if (transformedData.length > 0) {
+      console.log("Sample transformed row:", JSON.stringify(transformedData[0], null, 2));
+    }
+
+    return transformedData;
   } catch (error) {
     console.error("Error converting Excel to JSON:", error);
     throw new Error("Failed to convert Excel file to JSON");
@@ -42,7 +66,8 @@ export const getExcelColumns = (excelBuffer: Buffer, sheetIndex: number = 0): st
       const cellAddress = xlsx.utils.encode_cell({ r: 0, c: col });
       const cell = sheet[cellAddress];
       if (cell && cell.v) {
-        headers.push(String(cell.v));
+        // Trim whitespace from headers to handle cases like "COMPANY'S NAME "
+        headers.push(String(cell.v).trim());
       }
     }
     

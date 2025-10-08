@@ -42,7 +42,17 @@ export const bulkEmailGenerationFromExcel = async (req: Request, res: Response) 
     }
 
     // Processing options from request
+    const instructions = (
+      req.body.instructions ||
+      req.body.email_instructions ||
+      req.body.email_topic ||
+      req.body.prompt ||
+      req.body.goal ||
+      ""
+    ).toString();
+
     const options = {
+      instructions: instructions.trim() || undefined,
       scrapeWebsites: req.body.scrape_websites !== 'false', // Default true
       maxConcurrentRequests: parseInt(req.body.max_concurrent_requests) || 5
     };
@@ -51,6 +61,7 @@ export const bulkEmailGenerationFromExcel = async (req: Request, res: Response) 
 
     // Process the Excel file
     const result = await bulkEmailFromExcel(req.file.buffer, myCompanyInfo, options);
+    const requiresInstructions = Boolean(result.requiresInstructions);
 
     // Log processing summary
     console.log(`Bulk email processing completed:
@@ -62,7 +73,9 @@ export const bulkEmailGenerationFromExcel = async (req: Request, res: Response) 
 
     // Prepare response
     const response = {
-      message: "Bulk email generation completed successfully",
+      message: requiresInstructions
+        ? "We need a bit more direction before we can generate your outreach emails."
+        : "Bulk email generation completed successfully",
       data: {
         emails: result.results,
         summary: {
@@ -70,19 +83,14 @@ export const bulkEmailGenerationFromExcel = async (req: Request, res: Response) 
           successfulGenerations: result.results.length,
           errorCount: result.errors.length,
           columnMappingUsed: result.columnMapping,
-          unmappedColumns: result.unmappedColumns
+          unmappedColumns: result.unmappedColumns,
+          requiresInstructions,
         },
-        processing_options: options
+        errors: result.errors,
+        guidance: result.guidance,
+        processing_options: options,
       }
     };
-
-    // Include errors in response if any
-    if (result.errors.length > 0) {
-      response.data.summary = {
-        ...response.data.summary,
-        errors: result.errors
-      } as any;
-    }
 
     res.status(200).json(response);
 
@@ -106,12 +114,12 @@ export const getBulkEmailPreview = async (req: Request, res: Response) => {
       });
     }
 
-    const { getExcelColumns } = await import("../../../../services/agents/email/excelToJson.service");
-    const { mapExcelColumns } = await import("../../../../services/agents/email/columnMapper.service");
+  const { getExcelColumns } = await import("../../../../services/agents/email/excelToJson.service");
+  const { mapExcelColumns } = await import("../../../../services/agents/email/columnMapper.service");
 
-    // Extract columns and create mapping preview
-    const columnHeaders = getExcelColumns(req.file.buffer);
-    const mappingResult = await mapExcelColumns(columnHeaders);
+  // Extract columns and create mapping preview
+  const columnHeaders = getExcelColumns(req.file.buffer);
+  const mappingResult = await mapExcelColumns(columnHeaders);
 
     res.status(200).json({
       message: "Column mapping preview generated successfully",

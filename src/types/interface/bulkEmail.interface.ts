@@ -4,29 +4,39 @@ export interface ExcelToJsonOptions {
 }
 export interface BulkEmailResult {
   company: string;
-  website: string;
   email: string;
-  details: string;
   subject: string;
   body: string;
+  website?: string;
   industry?: string;
   employees?: string;
   type?: string;
+  details?: string;
   mappingConfidence?: number;
+  instructionsUsed?: string;
 }
 
 export interface ProcessingOptions {
   scrapeWebsites?: boolean;
   includeUnmappedColumns?: boolean;
   maxConcurrentRequests?: number;
+  instructions?: string;
 }
 
 export interface BulkEmailFromExcelResponse {
   results: BulkEmailResult[];
-  columnMapping: any;
+  columnMapping: FieldMapping;
   unmappedColumns: string[];
   totalProcessed: number;
   errors: string[];
+  requiresInstructions?: boolean;
+  guidance?: InstructionGuidance;
+}
+
+export interface InstructionGuidance {
+  message: string;
+  suggestedQuestions: string[];
+  examplePrompt: string;
 }
 
 export interface FieldMapping {
@@ -39,6 +49,11 @@ export interface FieldMapping {
   establishedYear: string;
   contactInfo: string;
   details: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  customerSegment?: string;
+  preferences?: string;
 }
 
 export interface MappingResult {

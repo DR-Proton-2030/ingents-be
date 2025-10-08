@@ -21,7 +21,10 @@ export const exampleUsage = async () => {
       my_company_website: "https://techsolutions.com"
     };
 
-    const result = await bulkEmailFromExcel(excelBuffer, myCompanyInfo);
+    // Example with explicit instructions
+    const result = await bulkEmailFromExcel(excelBuffer, myCompanyInfo, {
+      instructions: "Write a concise cold email introducing our managed IT services and invite them to a discovery call."
+    });
     
     console.log("Processing Results:");
     console.log(`- Total companies: ${result.totalProcessed}`);
@@ -29,8 +32,9 @@ export const exampleUsage = async () => {
     console.log(`- Errors: ${result.errors.length}`);
     console.log(`- Column mapping used:`, result.columnMapping);
     
-    // Example 2: With custom options
+    // Example 2: With website scraping and concurrency control
     const customOptions = {
+      instructions: "Highlight how our cybersecurity audit can reduce breach risk and ask for a 20-minute call.",
       scrapeWebsites: true,
       maxConcurrentRequests: 3
     };
@@ -45,7 +49,7 @@ export const exampleUsage = async () => {
     customResult.results.forEach((email, index) => {
       console.log(`\n--- Email ${index + 1} ---`);
       console.log(`Company: ${email.company}`);
-      console.log(`Website: ${email.website}`);
+      console.log(`Website: ${email.website || 'N/A'}`);
       console.log(`Subject: ${email.subject}`);
       console.log(`Body Preview: ${email.body.substring(0, 100)}...`);
     });

@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import authRouter from "./api/v1/routes/auth/auth.routes";
-import { bulkEmailRoutes } from "./api/v1/routes/bulkEmail/bulkEmail.routes";
+import messageRouter from "./api/v1/routes/messages/messages.routes";
 const app = express();
 
 app.use(cookieParser());
@@ -33,7 +33,7 @@ app.options("*", (req, res) => {
 
 // Routes
 app.use("/api/v1/auth", authRouter);
-app.use("/api/v1/bulk-email", bulkEmailRoutes);
+app.use("/api/v1/messages", messageRouter);
 
 // Default route for health check
 app.get("/", (req, res) => {
