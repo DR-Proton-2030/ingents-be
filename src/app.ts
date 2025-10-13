@@ -7,6 +7,9 @@ import purchasedEmailTemplateRouter from "./api/v1/routes/purchasedEmailTemplate
 import sentEmailRouter from "./api/v1/routes/sentEmail/sentEmail.routes";
 import emailTemplateRouter from "./api/v1/routes/emailTemplate/emailTemplate.routes";
 import messageRouter from "./api/v1/routes/messages/messages.routes";
+import Facebookrouter from "./api/v1/routes/facebook/facebook.route";
+import userRouter from "./api/v1/routes/user.route";
+import instagramRouter from "./api/v1/routes/instagram/instagram.route";
 const app = express();
 
 app.use(cookieParser());
@@ -37,10 +40,13 @@ app.options("*", (req, res) => {
 
 // Routes
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/user", userRouter);
 app.use("/api/v1/messages", messageRouter);
 app.use("/api/v1/purchased-email-templates", purchasedEmailTemplateRouter);
 app.use("/api/v1/sent-emails", sentEmailRouter);
 app.use("/api/v1/email-templates", emailTemplateRouter);
+app.use("/api/v1/fa", Facebookrouter);
+app.use("/api/v1/ig", instagramRouter);
 
 // Default route for health check
 app.get("/", (req, res) => {
