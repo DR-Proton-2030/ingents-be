@@ -10,6 +10,7 @@ import messageRouter from "./api/v1/routes/messages/messages.routes";
 import Facebookrouter from "./api/v1/routes/facebook/facebook.route";
 import userRouter from "./api/v1/routes/user.route";
 import instagramRouter from "./api/v1/routes/instagram/instagram.route";
+import youtubeRouter from "./api/v1/routes/youtube/youtube.route";
 const app = express();
 
 app.use(cookieParser());
@@ -47,6 +48,7 @@ app.use("/api/v1/sent-emails", sentEmailRouter);
 app.use("/api/v1/email-templates", emailTemplateRouter);
 app.use("/api/v1/fa", Facebookrouter);
 app.use("/api/v1/ig", instagramRouter);
+app.use("/api/v1/youtube", youtubeRouter);
 
 // Default route for health check
 app.get("/", (req, res) => {

@@ -18,4 +18,9 @@ export interface IUser {
     name: string;
     access_token: string;
   };
+  youtube?: {
+    project_id: string;
+    name: string;
+    access_token: string;
+  };
 }
