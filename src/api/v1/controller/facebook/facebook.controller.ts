@@ -11,6 +11,8 @@ const FACEBOOK_GRAPH_URL = "https://graph.facebook.com/v20.0";
 
 export const facebookLogin = (req: Request, res: Response) => {
   const { user_id } = req.query;
+  console.log("=====>userId", user_id);
+
   console.log("user_id", user_id);
   if (!user_id) return res.status(400).json({ error: "Client ID is required" });
   const authUrl = getFacebookAuthURL(user_id as string);

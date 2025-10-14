@@ -10,12 +10,13 @@ const REDIRECT_URI = process.env.FACEBOOK_REDIRECT_URI!;
 const FACEBOOK_GRAPH_URL = "https://graph.facebook.com";
 
 export const getFacebookAuthURL = (userId: string) => {
+  
   const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FACEBOOK_CLIENT_ID}&redirect_uri=${encodeURIComponent(
     REDIRECT_URI
-  )}&scope=email,public_profile,pages_read_engagement,pages_show_list&response_type=code&state=${userId}`;
+  )}&scope=email,public_profile,pages_read_engagement,pages_manage_posts,pages_show_list&response_type=code&state=${userId}`;
   return authUrl;
 };
-
+// cl
 export const getFacebookUser = async (code: string) => {
   const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token`;
 
