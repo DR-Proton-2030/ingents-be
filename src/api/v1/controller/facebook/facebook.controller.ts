@@ -6,6 +6,8 @@ import {
   getPageTokenService,
 } from "../../../../services/facebook/facebook.service";
 import axios from "axios";
+import FormData from "form-data";
+import { uploadFileToS3Service } from "../../../../services/uploadFile/uploadFile";
 import UserModel from "../../../../models/users/users.model";
 const FACEBOOK_GRAPH_URL = "https://graph.facebook.com/v20.0";
 
@@ -133,167 +135,80 @@ export const getAccessTokenLongTerm = async (req: Request, res: Response) => {
   }
 };
 
-export const postFacebookText = async (req: Request, res: Response) => {
+
+// Universal Facebook post: text, image, or video
+export const postFacebookUniversal = async (req: Request, res: Response) => {
   try {
-    const { userId, pageId, message } = req.body;
+    const { userId, pageId, message, imageUrl, videoURL } = req.body;
+    const uploadedImage = (req as any).files?.image?.[0];
+    const uploadedVideo = (req as any).files?.video?.[0];
 
-    if (!pageId || !message) {
-      return res.status(400).json({ error: "pageId and message are required" });
+    if (!userId || !pageId) {
+      return res.status(400).json({ error: "userId and pageId are required" });
     }
 
-    const user = await UserModel.findById(userId).exec();
-
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    const userAccessToken = (user as any).facebook?.access_token;
-
-    if (!userAccessToken) {
-      return res.status(401).json({ error: "Facebook access token missing" });
-    }
-
-    //  Get Page Access Token from user token
-    // const pagesRes = await axios.get(
-    //   `${FACEBOOK_GRAPH_URL}/me/accounts?access_token=${userAccessToken}`
-    // );
-    // const pageData = pagesRes.data.data.find((p: any) => p.id === pageId);
-    // console.log(pageData.id);
+    // Get page access token
     const { pageAccessToken, id } = await getPageTokenService(userId, pageId);
-    if (!id) {
-      return res.status(403).json({
-        error: "User is not an admin of this Page or Page not found",
+
+    // Priority: if message only, post text; if image present (file or url), post image; if video present, post video
+    if (message && !uploadedImage && !uploadedVideo && !imageUrl && !videoURL) {
+      // Text only
+      const postRes = await axios.post(`${FACEBOOK_GRAPH_URL}/${id}/feed`, {
+        message,
+        access_token: pageAccessToken,
       });
+      return res.status(200).json({ success: true, postId: postRes.data.id, message: "Text posted" });
     }
 
-    // Post message using Page Access Token
-    const postRes = await axios.post(`${FACEBOOK_GRAPH_URL}/${id}/feed`, {
-      message,
-      access_token: pageAccessToken,
-    });
-
-    return res.status(200).json({
-      success: true,
-      postId: postRes.data.id,
-      message: "Post published successfully!",
-    });
-  } catch (error: any) {
-    console.error(
-      "Facebook post error:",
-      error.response?.data || error.message
-    );
-    return res.status(500).json({
-      error: "Failed to post on Facebook",
-      details: error.response?.data || error.message,
-    });
-  }
-};
-
-// Upload Facebook Video
-export const uploadFacebookVideo = async (req: Request, res: Response) => {
-  try {
-    const { userId, title, description, videoURL } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "User id required",
-      });
-    }
-
-    if (!videoURL) {
-      return res.status(400).json({
-        success: false,
-        message: "No video URL provided",
-      });
-    }
-
-    const user = await UserModel.findById(userId);
-    if (!user || !user.facebook || !user.facebook.access_token) {
-      return res.status(401).json({
-        success: false,
-        message: "User Facebook token not found",
-      });
-    }
-
-    // const pageAccessToken =
-    //   user.facebook.access_token || user.facebook.access_token;
-
-    const { pageAccessToken, id } = await getPageTokenService(
-      userId,
-      user.facebook.project_id
-    );
-
-    const uploadUrl = `https://graph-video.facebook.com/v19.0/${user.facebook.project_id}/videos`;
-
-    const response = await axios.post(
-      uploadUrl,
-      {
-        file_url: videoURL,
-        title: title || "Untitled Video",
-        description: description || "",
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${pageAccessToken}`,
-        },
+    // If image file uploaded -> upload to S3, save to user, post via URL
+    if (uploadedImage || imageUrl) {
+      let finalImageUrl = imageUrl;
+      if (uploadedImage) {
+        finalImageUrl = await uploadFileToS3Service(`facebook_uploads/${userId}`, uploadedImage.buffer, uploadedImage.mimetype || "image/jpeg");
+        try {
+          await UserModel.findByIdAndUpdate(userId, { $set: { "facebook.last_uploaded_image": finalImageUrl } });
+        } catch (dbErr) {
+          console.warn("Failed to save image URL:", dbErr);
+        }
       }
-    );
 
-    return res.status(200).json({
-      success: true,
-      message: "Video uploaded successfully to Facebook",
-      videoId: response.data.id,
-      videoUrl: `https://www.facebook.com/${id}/videos/${response.data.id}`,
-    });
-  } catch (error: any) {
-    console.error(
-      "Facebook upload error:",
-      error.response?.data || error.message
-    );
-    return res.status(500).json({
-      success: false,
-      message: "Video upload to Facebook failed",
-      error: error.response?.data || error.message,
-    });
-  }
-};
-
-// Facebook photo post
-export const postFacebookImage = async (req: Request, res: Response) => {
-  try {
-    const { userId, pageId, imageUrl, caption } = req.body;
-
-    if (!userId || !pageId || !imageUrl) {
-      return res.status(400).json({
-        success: false,
-        message: "userId, pageId and imageUrl are required",
+      const imgRes = await axios.post(`${FACEBOOK_GRAPH_URL}/${id}/photos`, {
+        url: finalImageUrl,
+        caption: message || "",
+        access_token: pageAccessToken,
       });
+      return res.status(200).json({ success: true, postId: imgRes.data.id, message: "Image posted" });
     }
 
-    // Get page access token via service
-    const { pageAccessToken, id } = await getPageTokenService(userId, pageId);
+    // If video file uploaded or videoURL provided -> upload to S3 (if file), then post via graph-video endpoint
+    if (uploadedVideo || videoURL) {
+      let finalVideoUrl = videoURL;
+      if (uploadedVideo) {
+        finalVideoUrl = await uploadFileToS3Service(`facebook_uploads/${userId}`, uploadedVideo.buffer, uploadedVideo.mimetype || "video/mp4");
+        try {
+          await UserModel.findByIdAndUpdate(userId, { $set: { "facebook.last_uploaded_video": finalVideoUrl } });
+        } catch (dbErr) {
+          console.warn("Failed to save video URL:", dbErr);
+        }
+      }
 
-    // Post image to Facebook Page
-    const fbResponse = await axios.post(`${FACEBOOK_GRAPH_URL}/${id}/photos`, {
-      url: imageUrl,
-      caption: caption || "",
-      access_token: pageAccessToken,
-    });
+      const uploadUrl = `https://graph-video.facebook.com/v19.0/${id}/videos`;
+      const resp = await axios.post(
+        uploadUrl,
+        {
+          file_url: finalVideoUrl,
+          title: message || "",
+        },
+        {
+          headers: { Authorization: `Bearer ${pageAccessToken}` },
+        }
+      );
+      return res.status(200).json({ success: true, videoId: resp.data.id, message: "Video posted" });
+    }
 
-    return res.status(200).json({
-      success: true,
-      message: "Image posted successfully on Facebook!",
-      postId: fbResponse.data.id,
-      imageUrl,
-    });
+    return res.status(400).json({ error: "No valid content to post" });
   } catch (error: any) {
-    console.error(
-      "Facebook image post error:",
-      error.response?.data || error.message
-    );
-    return res.status(500).json({
-      success: false,
-      message: "Failed to post image on Facebook",
-      error: error.response?.data || error.message,
-    });
+    console.error("Universal Facebook post error:", error.response?.data || error.message);
+    return res.status(500).json({ success: false, error: error.response?.data || error.message });
   }
 };
