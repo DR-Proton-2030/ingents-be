@@ -1,5 +1,6 @@
 import { generateOpenAiResponse } from "../../adapter/llm/openai.adapter";
 import { INTENT_CODE_MAP } from "../../constants/codeMap/CodeMap";
+import { IUser } from "../../types/interface/user.interface";
 
 export class ChatService {
   // Returns the internal code for a user's intent

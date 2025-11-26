@@ -5,6 +5,6 @@ import { sendMessage } from "../../controller/chatController/message.controller"
 
 const messageRouter = Router();
 
-messageRouter.post("/send", upload.single("file"), sendMessage);
+messageRouter.post("/send",userAuth, upload.single("file"), sendMessage);
 
 export default messageRouter;
