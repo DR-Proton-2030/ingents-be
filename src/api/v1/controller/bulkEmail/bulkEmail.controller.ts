@@ -1,77 +1,17 @@
 import { Request, Response } from "express";
 import { bulkEmailFromExcel } from "../../../../services/agents/email/bulkEmailFromExcel.service";
 import { MyCompanyInfo } from "../../../../types/interface/openai.interface";
+import { processBulkEmailGenerationFromExcel } from "../../../../services/agents/email/processBulkEmailFromExcel";
 
 export const bulkEmailGenerationFromExcel = async (req: Request, res: Response) => {
   try {
-    // Validate that file was uploaded
-    if (!req.file || !req.file.buffer) {
+    const { result, requiresInstructions } = await processBulkEmailGenerationFromExcel(req);
+    if (!result) {
       return res.status(400).json({
-        message: "Excel file is required",
-        error: "No file uploaded"
+        message: "Failed to process Excel file for bulk email generation",
+        error: "No result returned"
       });
     }
-
-    // Validate file type
-    const allowedMimeTypes = [
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-      'application/vnd.ms-excel', // .xls
-      'application/excel',
-      'application/x-excel'
-    ];
-
-    if (!allowedMimeTypes.includes(req.file.mimetype)) {
-      return res.status(400).json({
-        message: "Invalid file type. Please upload an Excel file (.xlsx or .xls)",
-        error: "Unsupported file format"
-      });
-    }
-
-    // Extract company info from request body
-    const myCompanyInfo: MyCompanyInfo = {
-      my_company_name: req.body.my_company_name || req.user?.company_details?.company_name || "",
-      my_company_website: req.body.my_company_website || req.user?.company_details?.company_website || ""
-    };
-
-    // Validate required company info
-    if (!myCompanyInfo.my_company_name) {
-      return res.status(400).json({
-        message: "Company name is required",
-        error: "Missing my_company_name in request body or user profile"
-      });
-    }
-
-    // Processing options from request
-    const instructions = (
-      req.body.instructions ||
-      req.body.email_instructions ||
-      req.body.email_topic ||
-      req.body.prompt ||
-      req.body.goal ||
-      ""
-    ).toString();
-
-    const options = {
-      instructions: instructions.trim() || undefined,
-      scrapeWebsites: req.body.scrape_websites !== 'false', // Default true
-      maxConcurrentRequests: parseInt(req.body.max_concurrent_requests) || 5
-    };
-
-    console.log(`Processing Excel file for bulk email generation. Company: ${myCompanyInfo.my_company_name}`);
-
-    // Process the Excel file
-    const result = await bulkEmailFromExcel(req.file.buffer, myCompanyInfo, options);
-    const requiresInstructions = Boolean(result.requiresInstructions);
-
-    // Log processing summary
-    console.log(`Bulk email processing completed:
-      - Total companies processed: ${result.totalProcessed}
-      - Successful email generations: ${result.results.length}
-      - Errors: ${result.errors.length}
-      - Column mapping confidence: ${result.columnMapping}
-    `);
-
-    // Prepare response
     const response = {
       message: requiresInstructions
         ? "We need a bit more direction before we can generate your outreach emails."
@@ -88,17 +28,26 @@ export const bulkEmailGenerationFromExcel = async (req: Request, res: Response) 
         },
         errors: result.errors,
         guidance: result.guidance,
-        processing_options: options,
+        processing_options: result.options,
       }
     };
-
     res.status(200).json(response);
-
-  } catch (error) {
+  } catch (error: any) {
+    let status = 500;
+    let message = "Failed to process Excel file for bulk email generation";
+    if (error?.message?.includes("Excel file is required")) {
+      status = 400;
+      message = "Excel file is required";
+    } else if (error?.message?.includes("Company name is required")) {
+      status = 400;
+      message = "Company name is required";
+    } else if (error?.message?.includes("Invalid file type")) {
+      status = 400;
+      message = "Invalid file type. Please upload an Excel file (.xlsx or .xls)";
+    }
     console.error("Error in bulk email generation:", error);
-    
-    res.status(500).json({
-      message: "Failed to process Excel file for bulk email generation",
+    res.status(status).json({
+      message,
       error: error instanceof Error ? error.message : "Unknown error occurred"
     });
   }

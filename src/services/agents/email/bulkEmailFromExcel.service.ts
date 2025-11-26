@@ -1,10 +1,16 @@
 import { emailPrompt } from "../../../constants/prompts/emailPrompt";
 import { llmSystemRole } from "../../../constants/llmRole/llmSystemRole";
 import { generateOpenAiResponse } from "../../../adapter/llm/openai.adapter";
-import { CompanyDetails, MyCompanyInfo } from "../../../types/interface/openai.interface";
+import {
+  CompanyDetails,
+  MyCompanyInfo,
+} from "../../../types/interface/openai.interface";
 import { convertExcelToJson, getExcelColumns } from "./excelToJson.service";
 import { mapExcelColumns } from "./columnMapper.service";
-import { scrapeCompanyWebsite, formatScrapedDataAsDetails } from "./websiteScraper.service";
+import {
+  scrapeCompanyWebsite,
+  formatScrapedDataAsDetails,
+} from "./websiteScraper.service";
 import {
   FieldMapping,
   BulkEmailResult,
@@ -21,7 +27,7 @@ export const bulkEmailFromExcel = async (
   const {
     scrapeWebsites = true,
     maxConcurrentRequests = 5,
-    instructions: rawInstructions = ""
+    instructions: rawInstructions = "",
   } = options;
 
   const instructions = rawInstructions.trim();
@@ -68,8 +74,14 @@ export const bulkEmailFromExcel = async (
     // Step 4: Check if we need clear instructions from the user
     if (!instructions) {
       const sampleRow = jsonData[0];
-      const sampleDetails = getValueFromRow(sampleRow, mappingResult.mapping.details);
-      const sampleWebsite = getValueFromRow(sampleRow, mappingResult.mapping.website);
+      const sampleDetails = getValueFromRow(
+        sampleRow,
+        mappingResult.mapping.details
+      );
+      const sampleWebsite = getValueFromRow(
+        sampleRow,
+        mappingResult.mapping.website
+      );
 
       if (!sampleDetails && !sampleWebsite) {
         guidance = await generateInstructionGuidance(columnHeaders, sampleRow);
@@ -100,7 +112,7 @@ export const bulkEmailFromExcel = async (
         batch.length,
         "companies"
       );
-      
+
       const batchPromises = batch.map(async (row) => {
         return await processCompanyRow(
           row,
@@ -113,11 +125,11 @@ export const bulkEmailFromExcel = async (
 
       try {
         const batchResults = await Promise.allSettled(batchPromises);
-        
+
         batchResults.forEach((result, index) => {
-          if (result.status === 'fulfilled' && result.value) {
+          if (result.status === "fulfilled" && result.value) {
             results.push(result.value);
-          } else if (result.status === 'rejected') {
+          } else if (result.status === "rejected") {
             const companyRow = batch[index];
             const companyName =
               getValueFromRow(companyRow, mappingResult.mapping.companyName) ||
@@ -138,7 +150,7 @@ export const bulkEmailFromExcel = async (
 
       // Add a small delay between batches to avoid overwhelming APIs
       if (i + batchSize < jsonData.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
 
@@ -158,7 +170,6 @@ export const bulkEmailFromExcel = async (
       requiresInstructions: Boolean(guidance),
       guidance,
     };
-
   } catch (error) {
     console.error("Error in bulkEmailFromExcel:", error);
     throw error;
@@ -177,8 +188,14 @@ const processCompanyRow = async (
     const companyName = getValueFromRow(row, mapping.companyName);
     const email = getValueFromRow(row, mapping.email);
 
-    console.log(`Processing row - mapping.companyName: "${mapping.companyName}"`);
-    console.log(`Row keys: ${Object.keys(row).map((k) => `"${k}"`).join(', ')}`);
+    console.log(
+      `Processing row - mapping.companyName: "${mapping.companyName}"`
+    );
+    console.log(
+      `Row keys: ${Object.keys(row)
+        .map((k) => `"${k}"`)
+        .join(", ")}`
+    );
     console.log(`Extracted companyName: "${companyName}"`);
 
     if (!companyName) {
@@ -198,14 +215,15 @@ const processCompanyRow = async (
         const scrapedData = await scrapeCompanyWebsite(website);
         details = formatScrapedDataAsDetails(scrapedData);
       } catch (scrapeError) {
-        console.warn(`Failed to scrape website for ${companyName}:`, scrapeError);
+        console.warn(
+          `Failed to scrape website for ${companyName}:`,
+          scrapeError
+        );
       }
     }
 
     if (!instructions && !details) {
-      const missingError = new Error(
-        `Missing instructions for ${companyName}`
-      );
+      const missingError = new Error(`Missing instructions for ${companyName}`);
       (missingError as any).isMissingInstructions = true;
       (missingError as any).companyName = companyName;
       throw missingError;
@@ -213,10 +231,10 @@ const processCompanyRow = async (
 
     const companyDetails: CompanyDetails = {
       "COMPANY'S NAME": companyName,
-      "INDUSTRY": industry || "",
-      "TYPE": type || "",
+      INDUSTRY: industry || "",
+      TYPE: type || "",
       "Company's Website": website || "",
-      "Email": email || "",
+      Email: email || "",
       "No. of employees": employees || "",
       "ESTABLISHED YEAR": establishedYear || "",
       "Contact info": contactInfo || "",
@@ -245,7 +263,6 @@ const processCompanyRow = async (
       details: details || "",
       instructionsUsed: instructions || undefined,
     };
-
   } catch (error) {
     console.error(`Error processing company row:`, error);
     throw error;
@@ -254,41 +271,46 @@ const processCompanyRow = async (
 
 const getValueFromRow = (row: any, columnName: string): string => {
   if (!columnName || !row) return "";
-  
+
   // Trim the column name to handle any whitespace issues
   const trimmedColumnName = columnName.trim();
-  
+
   // Try exact match with trimmed column name first
   if (row[trimmedColumnName] !== undefined) {
     return String(row[trimmedColumnName]).trim();
   }
-  
+
   // Try exact match with original column name
   if (row[columnName] !== undefined) {
     return String(row[columnName]).trim();
   }
-  
+
   // Try case-insensitive match with trimmed names
   const keys = Object.keys(row);
-  const matchingKey = keys.find(key => 
-    key.trim().toLowerCase() === trimmedColumnName.toLowerCase()
+  const matchingKey = keys.find(
+    (key) => key.trim().toLowerCase() === trimmedColumnName.toLowerCase()
   );
-  
+
   if (matchingKey && row[matchingKey] !== undefined) {
     return String(row[matchingKey]).trim();
   }
-  
+
   // Try fuzzy matching for common variations
-  const fuzzyMatchingKey = keys.find(key => {
-    const normalizedKey = key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-    const normalizedColumnName = trimmedColumnName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const fuzzyMatchingKey = keys.find((key) => {
+    const normalizedKey = key
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+    const normalizedColumnName = trimmedColumnName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
     return normalizedKey === normalizedColumnName;
   });
-  
+
   if (fuzzyMatchingKey && row[fuzzyMatchingKey] !== undefined) {
     return String(row[fuzzyMatchingKey]).trim();
   }
-  
+
   return "";
 };
 
@@ -337,7 +359,10 @@ Please craft a friendly message encouraging the user to provide the missing deta
       return parsed;
     }
   } catch (guidanceError) {
-    console.warn("Failed to generate instruction guidance via LLM:", guidanceError);
+    console.warn(
+      "Failed to generate instruction guidance via LLM:",
+      guidanceError
+    );
   }
 
   return defaultGuidance;

@@ -7,9 +7,12 @@ import {
   updateSentEmail,
   deleteSentEmail,
 } from "../../controller/sentEmail/sentEmail.controller";
+import { bulkEmailGenerationFromExcel } from "../../controller/bulkEmail/bulkEmail.controller";
+import { upload } from "../../middlewares/helper/multer/multer.middleware";
 
 const router = Router();
 
+router.post("/excel",upload.single("file"), bulkEmailGenerationFromExcel);
 router.post("/", userAuth, createSentEmail);
 router.get("/", userAuth, getAllSentEmails);
 router.get("/:id", userAuth, getSentEmailById);
