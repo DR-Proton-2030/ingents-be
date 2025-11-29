@@ -1,14 +1,12 @@
 import { Request, Response } from "express";
-import { bulkEmailFromExcel } from "../../../../services/agents/email/bulkEmailFromExcel.service";
-import { ChatService } from "../../../../services/chat/chat.service";
-import UserModel from "../../../../models/users/users.model";
+import { AgentFactory } from "../../../../factory/Agent.factory";
 
 export const sendMessage = async (req: Request, res: Response) => {
   try {
     const { message } = req.body;
-    const chatService = new ChatService();
+    const agentFactory = new AgentFactory();
 
-    const intent = await chatService.getIntentCode(message);
+    const intent = await agentFactory.decideAgentCode(message);
 
     res.status(200).json({
       message: "Intent determined successfully",
