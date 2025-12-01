@@ -10,6 +10,7 @@ import { hashPassword } from "../../../../services/passwordControl/hashPassword"
 import { comparePassword } from "../../../../services/passwordControl/comparePassword";
 import { NODE_ENV } from "../../../../config/config";
 import { callMailServer } from "../../../../services/callMailServer/callMailServer";
+import { CompanyEmbeddingsService } from "../../../../services/companyEmbeddings/companyEmbeddings.service";
 
 export const signUp = async (req: Request, res: Response) => {
   console.log("=========> Req Body:", req.body);
@@ -31,11 +32,13 @@ export const signUp = async (req: Request, res: Response) => {
     const userExists = await UserModel.findOne({
       email: user_details.email,
     }).session(session);
+
     if (userExists) {
       await session.abortTransaction();
       session.endSession();
       return res.status(409).json({ message: "User already exists" });
     }
+    
     console.log("===>Logo", company_logo);
     const companyPayload: ICompany = {
       ...company_details,
@@ -51,6 +54,27 @@ export const signUp = async (req: Request, res: Response) => {
       profile_picture: user_avatar || null,
     };
     const userInstance = await new UserModel(userPayload).save({ session });
+
+    // Generate company embeddings for RAG functionality
+    try {
+      console.log('Generating company embeddings...');
+      await CompanyEmbeddingsService.createCompanyEmbeddings(
+        {
+          company: companyInstance.toObject(),
+          additionalContext: [
+            `Primary contact: ${user_details.full_name} (${user_details.email})`,
+            `User role: ${user_details.role || 'Administrator'}`,
+            `Registration date: ${new Date().toISOString()}`
+          ]
+        },
+        session
+      );
+      console.log('Company embeddings generated successfully');
+    } catch (embeddingError) {
+      console.error('Error generating company embeddings:', embeddingError);
+      // Don't fail the signup if embeddings fail, but log the error
+      // You might want to implement a retry mechanism or background job here
+    }
 
     await session.commitTransaction();
     session.endSession();

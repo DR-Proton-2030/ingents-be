@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_API_KEY } from "../../config/config";
+import { IGeminiRequestWithRag, IRagData } from "../../types/interface/ragData.interface";
 
 import { uploadFileToS3Service } from "../../services/uploadFile/uploadFile";
 import * as fs from "node:fs";
@@ -12,20 +13,56 @@ export class GeminiAdapter {
 		this.ai = new GoogleGenAI({ apiKey: apiKey ?? GEMINI_API_KEY ?? "" });
 	}
 
-	async generateImages({
-		prompt,
-		numberOfImages = 1,
-		model = "imagen-4.0-generate-001",
-		s3KeyPrefix = "gemini-images"
-	}: {
+	private formatRagContext(ragData: IRagData): string {
+		if (!ragData.contexts || ragData.contexts.length === 0) {
+			return "";
+		}
+
+		const relevantContexts = ragData.contexts
+			.filter(context => 
+				!ragData.relevanceThreshold || 
+				!context.metadata?.relevanceScore || 
+				context.metadata.relevanceScore >= ragData.relevanceThreshold
+			)
+			.slice(0, ragData.maxContexts || 5);
+
+		if (relevantContexts.length === 0) {
+			return "";
+		}
+
+		const contextString = relevantContexts
+			.map((context, index) => 
+				`Context ${index + 1} (${context.metadata?.source || 'unknown'}):\n${context.content}`
+			)
+			.join('\n\n');
+
+		return `\n\nRelevant Context Information:\n${contextString}\n\nPlease use this context information to provide more accurate and relevant responses.`;
+	}
+
+	async generateImages(config: {
 		prompt: string;
 		numberOfImages?: number;
 		model?: string;
 		s3KeyPrefix?: string;
+		ragData?: IRagData;
 	}) {
+		const {
+			prompt,
+			numberOfImages = 1,
+			model = "imagen-4.0-generate-001",
+			s3KeyPrefix = "gemini-images",
+			ragData
+		} = config;
+
+		// Enhance prompt with RAG context if available
+		let enhancedPrompt = prompt;
+		if (ragData) {
+			const ragContext = this.formatRagContext(ragData);
+			enhancedPrompt = prompt + ragContext;
+		}
 		const response: any = await this.ai.models.generateImages({
 			model,
-			prompt,
+			prompt: enhancedPrompt,
 			config: {
 				numberOfImages,
 			},
@@ -48,20 +85,30 @@ export class GeminiAdapter {
 		return urls;
 	}
 
-	async generateVideo({
-		prompt,
-		downloadPath,
-		model = "veo-3.1-generate-preview",
-		s3KeyPrefix = "gemini-videos"
-	}: {
+	async generateVideo(config: {
 		prompt: string;
 		downloadPath: string;
 		model?: string;
 		s3KeyPrefix?: string;
+		ragData?: IRagData;
 	}) {
+		const {
+			prompt,
+			downloadPath,
+			model = "veo-3.1-generate-preview",
+			s3KeyPrefix = "gemini-videos",
+			ragData
+		} = config;
+
+		// Enhance prompt with RAG context if available
+		let enhancedPrompt = prompt;
+		if (ragData) {
+			const ragContext = this.formatRagContext(ragData);
+			enhancedPrompt = prompt + ragContext;
+		}
 		let operation = await this.ai.models.generateVideos({
 			model,
-			prompt,
+			prompt: enhancedPrompt,
 		});
 
 		// Poll the operation status until the video is ready.
@@ -101,5 +148,50 @@ export class GeminiAdapter {
 			mimeType as string
 		);
 		return url;
+	}
+
+	async generateText(config: IGeminiRequestWithRag) {
+		try {
+			const {
+				prompt,
+				systemMessage,
+				ragData,
+				model = "gemini-1.5-flash",
+				maxTokens = 500,
+				temperature = 0.7
+			} = config;
+
+			// Enhance prompt with RAG context if available
+			let enhancedPrompt = prompt;
+			if (ragData) {
+				const ragContext = this.formatRagContext(ragData);
+				enhancedPrompt = prompt + ragContext;
+			}
+
+			// Combine system message and enhanced prompt
+			const fullPrompt = systemMessage ? `${systemMessage}\n\n${enhancedPrompt}` : enhancedPrompt;
+
+			const result = await this.ai.models.generateContent({
+				model,
+				contents: [{
+					role: 'user',
+					parts: [{
+						text: fullPrompt
+					}]
+				}]
+			});
+
+			const content = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+			return {
+				prompt: enhancedPrompt,
+				originalPrompt: prompt,
+				content,
+				ragData,
+			};
+		} catch (error) {
+			console.error("Gemini text generation failed:", error);
+			throw error;
+		}
 	}
 }

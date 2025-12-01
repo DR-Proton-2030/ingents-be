@@ -1,4 +1,5 @@
 export interface ICompany {
+	_id?: string;
 	company_name: string;
 	website: string;
 	logo: string;
@@ -9,4 +10,7 @@ export interface ICompany {
 	description: string;
 	contact_email: string;
 	phone_number: string;
+	founding_year: number;
+	services: string[];
+	products: string[];
 }

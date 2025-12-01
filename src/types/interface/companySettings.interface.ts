@@ -7,4 +7,14 @@ export interface ICompanySettings {
     content: string;
     embedding: Array<number>;
     language: string;
+    metadata?: {
+        source?: string;
+        type?: string;
+        industry?: string;
+        companySize?: string;
+        lastUpdated?: Date;
+        documentCount?: number;
+        averageRelevance?: number;
+        [key: string]: any;
+    };
 }
