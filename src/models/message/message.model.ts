@@ -1,7 +1,7 @@
 import { model } from "mongoose";
 import { IChatMessage } from "../../types/interface/message.interface";
-import { chatMessageSchema } from "./message.schema";
+import { messageSchema } from "./message.schema";
 
-const ChatMessageModel = model<IChatMessage>("chat_message", chatMessageSchema);
+const MessageModel = model<IChatMessage>("messages", messageSchema);
 
-export default ChatMessageModel;
+export default MessageModel;

@@ -163,7 +163,7 @@ export const signIn = async (req: Request, res: Response) => {
 
 export const verifyToken = async (req: Request, res: Response) => {
   try {
-    const { _id, company_object_id } = req.user;
+    const { _id, company_object_id } = req.user ;
     console.log("user", _id, company_object_id);
     const user = await UserModel.findById(_id).populate("company_details");
     if (!user) {

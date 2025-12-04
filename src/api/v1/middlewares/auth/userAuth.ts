@@ -9,6 +9,10 @@ export const userAuth = (req: Request, res: Response, next: NextFunction) => {
 	}
 	try {
 		const decoded = verifyToken(token);
+		if(!decoded) {
+			res.status(403).json({ message: "Invalid token" });
+			return;
+		}
 		req.user = decoded; // Attach user data to request
 		next();
 	} catch (error) {

@@ -4,4 +4,5 @@ export interface IChatMessage {
   chatId: SchemaDefinitionProperty<Types.ObjectId>;
   sender: "user" | "bot";
   content: string;
+  files?: string[];
 }

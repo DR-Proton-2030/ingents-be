@@ -36,8 +36,8 @@ export async function processBulkEmailGenerationFromExcel(
     }
     buffer = req.file.buffer;
     companyInfo = {
-      my_company_name: req.body.my_company_name || req.user?.company_details?.company_name || "",
-      my_company_website: req.body.my_company_website || req.user?.company_details?.company_website || ""
+      my_company_name: req.body.my_company_name,
+      my_company_website: req.body.my_company_website
     };
     const instructions = (
       req.body.instructions ||

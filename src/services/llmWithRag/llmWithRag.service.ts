@@ -11,9 +11,6 @@ export class LLMWithRagService {
     this.geminiAdapter = new GeminiAdapter();
   }
 
-  /**
-   * Generate text response using OpenAI with RAG context
-   */
   async generateOpenAIResponseWithRag(
     prompt: string,
     systemMessage: string,
@@ -28,7 +25,7 @@ export class LLMWithRagService {
       temperature: 0.7
     });
   }
-
+  
   /**
    * Generate text response using Gemini with RAG context
    */

@@ -19,3 +19,6 @@ export const RAG_CONFIG = {
   overlapSize: 100, // Overlap between chunks in tokens
   minChunkSize: 50, // Minimum chunk size in tokens
 };
+
+export const SETU_CLIENT_ID = process.env.SETU_CLIENT_ID;
+export const SETU_CLIENT_SECRET = process.env.SETU_CLIENT_SECRET;
