@@ -16,7 +16,7 @@ export const saveMessage = async (sender: "user" | "bot", content: string, userI
             content,
             `You are an AI assistant for business automation.
             Your job is to generate a short title for the following message content that can be used as a chat session title.
-            Respond ONLY with the title string.`
+            Respond with json {title:<string>}.`
         );
 
         if(!response) {
@@ -24,7 +24,7 @@ export const saveMessage = async (sender: "user" | "bot", content: string, userI
         }
         const payload : IChatSession = {
             userId,
-            title: response.parsedContent,
+            title: response.parsedContent.title || "New Chat Session",
         }
         const newChat = await new ChatSessionModel(payload).save();
         chatObjectId = newChat._id.toString();
@@ -36,5 +36,6 @@ export const saveMessage = async (sender: "user" | "bot", content: string, userI
         files
     }
     const newMessage = await new MessageModel(messagePayload).save();
+    
     return newMessage;
 }

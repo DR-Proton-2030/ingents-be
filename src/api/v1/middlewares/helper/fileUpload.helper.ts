@@ -12,10 +12,8 @@ export const fileUploadHelper = async (
       | undefined;
 
     if (!files || Object.keys(files).length === 0) {
-      return res.status(400).json({
-        message: "No files uploaded",
-        error: "At least one file is required",
-      });
+      next();
+      return;
     }
 
     // Loop over each field name

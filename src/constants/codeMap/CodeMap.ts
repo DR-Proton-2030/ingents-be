@@ -11,6 +11,7 @@ export const INTENT_CODE_MAP: Record<string, string> = {
   generate_invoice: "INV01",
   social_report: "SOCIALREPORT01",
   generate_lead_list: "LEAD01",
-  generate_media: "MEDIA01",
+  generate_photo: "MEDIA01",
+  generate_video: "MEDIA02",
   // Add more as needed
 };

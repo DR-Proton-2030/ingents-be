@@ -1,4 +1,4 @@
-import { generateOpenAiResponse } from "../../adapter/llm/openai.adapter";
+import { generateOpenAiResponse, getOpenAIEmbeddings } from "../../adapter/llm/openai.adapter";
 import { GeminiAdapter } from "../../adapter/llm/gemini.adapter";
 import { IRagData, IRagContext } from "../../types/interface/ragData.interface";
 import { CompanyEmbeddingsService } from "../companyEmbeddings/companyEmbeddings.service";
@@ -53,6 +53,8 @@ export class LLMWithRagService {
     numberOfImages: number = 1,
     s3KeyPrefix: string = "rag-generated-images"
   ) {
+
+    // console.log("---------final prompt is-----", prompt);
     return await this.geminiAdapter.generateImages({
       prompt,
       numberOfImages,
@@ -79,7 +81,7 @@ export class LLMWithRagService {
   }
 
   /**
-   * Get RAG context from company embeddings
+   * Get RAG context from company embeddings using semantic similarity search
    */
   async getCompanyRagContext(
     companyObjectId: string,
@@ -93,6 +95,23 @@ export class LLMWithRagService {
         return { contexts: [] };
       }
 
+      // Generate embedding for the query to find semantic similarity
+      const queryEmbedding = await getOpenAIEmbeddings(query);
+      
+      // Calculate similarity between query and company content using embeddings
+      let relevanceScore = 0.8; // Default high score for own company data
+      
+      if (companySettings.embedding && companySettings.embedding.length > 0 && queryEmbedding.length > 0) {
+        // Calculate cosine similarity
+        const dotProduct = queryEmbedding.reduce((sum: number, val: number, i: number) => 
+          sum + val * (companySettings.embedding[i] || 0), 0
+        );
+        const magnitudeA = Math.sqrt(queryEmbedding.reduce((sum: number, val: number) => sum + val * val, 0));
+        const magnitudeB = Math.sqrt(companySettings.embedding.reduce((sum: number, val: number) => sum + val * val, 0));
+        
+        relevanceScore = dotProduct / (magnitudeA * magnitudeB);
+      }
+
       const ragContext: IRagContext = {
         id: String(companySettings.company_object_id),
         content: companySettings.content,
@@ -100,7 +119,7 @@ export class LLMWithRagService {
           // Use stored metadata from database
           source: companySettings.metadata?.source || "company_profile",
           type: companySettings.metadata?.type || "company_settings",
-          relevanceScore: 1.0, // Since this is the company's own data
+          relevanceScore: relevanceScore, // Use calculated similarity score
           timestamp: companySettings.metadata?.lastUpdated || new Date(),
           // Add additional metadata from the stored data
           industry: companySettings.metadata?.industry,
@@ -114,11 +133,14 @@ export class LLMWithRagService {
         }
       };
 
+      console.log(`RAG Context created with relevance score: ${relevanceScore}`);
+      console.log(`Company content length: ${companySettings.content.length}`);
+
       return {
         contexts: [ragContext],
         query,
         maxContexts,
-        relevanceThreshold: 0.5
+        relevanceThreshold: 0 // Always include company context (set to 0)
       };
     } catch (error) {
       console.error("Error getting company RAG context:", error);
@@ -127,7 +149,8 @@ export class LLMWithRagService {
   }
 
   /**
-   * Get RAG context using RAG service
+   * Get RAG context using company embeddings (removed RAG service dependency)
+   * This method now directly uses company embeddings for similarity search
    */
   async getRagContext(
     companyId: string,
@@ -136,28 +159,9 @@ export class LLMWithRagService {
     relevanceThreshold: number = 0.5
   ): Promise<IRagData> {
     try {
-      const ragService = new RagService(companyId);
-      const searchResults = await ragService.similaritySearch(query, maxContexts);
-
-      const contexts: IRagContext[] = searchResults.map((result: any, index: number) => ({
-        id: `${companyId}_${index}`,
-        content: result.content,
-        metadata: {
-          source: result.metadata?.source || "rag_service",
-          type: result.metadata?.type || "document",
-          relevanceScore: result.similarity || 0,
-          timestamp: result.metadata?.timestamp || new Date()
-        }
-      }));
-
-      ragService.cleanup();
-
-      return {
-        contexts,
-        query,
-        maxContexts,
-        relevanceThreshold
-      };
+      // Use getCompanyRagContext instead of RagService
+      // since we already have embeddings in CompanySettings
+      return await this.getCompanyRagContext(companyId, query, maxContexts);
     } catch (error) {
       console.error("Error getting RAG context:", error);
       return { contexts: [] };

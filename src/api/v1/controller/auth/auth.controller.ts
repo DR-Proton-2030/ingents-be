@@ -109,6 +109,7 @@ export const signUp = async (req: Request, res: Response) => {
       data: { user: userDetails, token },
     });
   } catch (error) {
+    console.error("SignUp error:", error);
     if (session.inTransaction()) {
       await session.abortTransaction();
     }

@@ -9,46 +9,79 @@ import { IChatMessage } from "../../../../types/interface/message.interface";
 export const sendMessage = async (req: Request, res: Response) => {
   try {
     const { message, files, chatId } = req.body;
-    const { _id } = req.user;
+    const { _id, company_object_id } = req.user;
 
     const agentFactory = new AgentFactory();
     let messgaeHistory: IChatMessage[] = [];
     let chatObjectId = chatId;
 
+    let supportedFiles: string[] = [];
+    if (files) {
+      if (Array.isArray(files)) {
+        supportedFiles = files;
+      } else if (typeof files === "string") {
+        supportedFiles = [files];
+      }
+    }
+
     if (chatObjectId) {
       messgaeHistory = await getMessgaeHistoryByChatId(chatObjectId, 10);
     }
 
+    console.log("message history", messgaeHistory);
+
     const promptMessage =
       message +
-      (files ? `\n\nSupported files: ${files.join(", ")}` : "") +
+      (supportedFiles ? `\n\nSupported files: ${supportedFiles.join(", ")}` : "") +
       (messgaeHistory.length > 0
         ? `\n\nPrevious messages in this chat:\n${messgaeHistory
             .map(
               (msg: any) =>
-                `${msg.sender === _id.toString() ? "User" : "Agent"}: ${
-                  msg.content
+                `${msg.sender === "user" ? "User" : "Agent"}: ${
+                  msg.content,
+                  " files: " + (msg.files ? msg.files.join(", ") : "None")
                 }`
             )
             .join("\n")}`
         : "");
 
+    console.log("prompt is ", promptMessage);
     if (!chatObjectId) {
       const newMessage = await saveMessage(
         "user",
         message,
         _id.toString(),
         undefined,
-        files
+        supportedFiles
       );
       chatObjectId = newMessage.chatId;
+    } else{
+      await saveMessage(
+        "user",
+        message,
+        _id.toString(),
+        chatObjectId,
+        supportedFiles
+      );
     }
 
-    const intent = await agentFactory.decideAgentCode(promptMessage);
+    const result = await agentFactory.createAgentForUser(
+      promptMessage,
+      String(company_object_id)
+    );
+
+    // Save bot response with content and files
+    await saveMessage(
+      "bot",
+      result.content || "Task completed successfully",
+      _id.toString(),
+      chatObjectId,
+      result.files || []
+    );
 
     res.status(200).json({
-      message: "Intent determined successfully",
-      data: intent,
+      message: "Task completed successfully",
+      data: result,
     });
   } catch (error) {
     console.error("Error in sendMessage:", error);

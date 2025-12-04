@@ -1,10 +1,11 @@
 import { generateOpenAiResponse } from "../adapter/llm/openai.adapter";
 import { INTENT_CODE_MAP } from "../constants/codeMap/CodeMap";
-import { IUser } from "../types/interface/user.interface";
+import { generateEmailContent } from "../services/agents/email/email.agent";
+import { generateMediaWithGemini } from "../services/agents/mediaGeneration/mediaGeneration";
 
 export class AgentFactory {
   // Returns the internal code for a user's intent
-  async decideAgentCode(message: string): Promise<string> {
+  static async decideAgentCode(message: string): Promise<string> {
     const response = await generateOpenAiResponse(
       message,
       `You are an AI assistant for business automation.
@@ -20,7 +21,17 @@ export class AgentFactory {
     return code;
   }
 
-  async createAgentForUser(agentId: keyof typeof INTENT_CODE_MAP) {
-    
+  async createAgentForUser(prompt: string, companyObjectId: string): Promise<any> {
+    const agentId = await AgentFactory.decideAgentCode(prompt);
+    switch (agentId) {
+      case "MEDIA01":
+        return await generateMediaWithGemini({ prompt, numberOfImages: 1, companyObjectId });
+      case "MEDIA02":
+        return await generateMediaWithGemini({ prompt, numberOfImages: 1, companyObjectId });
+      case "MAIL01":
+        return await generateEmailContent(prompt, companyObjectId);
+      default:
+        throw new Error(`Unsupported agent ID: ${agentId}`);
+    }
   }
 }

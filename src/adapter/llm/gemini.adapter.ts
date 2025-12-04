@@ -60,6 +60,7 @@ export class GeminiAdapter {
 			const ragContext = this.formatRagContext(ragData);
 			enhancedPrompt = prompt + ragContext;
 		}
+		console.log("---------final prompt is-----", enhancedPrompt);
 		const response: any = await this.ai.models.generateImages({
 			model,
 			prompt: enhancedPrompt,
