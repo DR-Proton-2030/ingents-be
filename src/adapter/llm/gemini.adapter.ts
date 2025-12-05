@@ -49,7 +49,7 @@ export class GeminiAdapter {
 		const {
 			prompt,
 			numberOfImages = 1,
-			model = "imagen-4.0-generate-001",
+			model = "gemini-2.5-flash-image",
 			s3KeyPrefix = "gemini-images",
 			ragData
 		} = config;
@@ -61,6 +61,8 @@ export class GeminiAdapter {
 			enhancedPrompt = prompt + ragContext;
 		}
 		console.log("---------final prompt is-----", enhancedPrompt);
+		const models = await this.ai.models.list();
+		console.log("---------available models-----", models);
 		const response: any = await this.ai.models.generateImages({
 			model,
 			prompt: enhancedPrompt,
