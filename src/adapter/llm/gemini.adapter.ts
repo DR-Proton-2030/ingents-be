@@ -10,7 +10,10 @@ export class GeminiAdapter {
 	private ai: GoogleGenAI;
 
 	constructor(apiKey?: string) {
-		this.ai = new GoogleGenAI({ apiKey: apiKey ?? GEMINI_API_KEY ?? "" });
+		this.ai = new GoogleGenAI({ 
+			apiKey: apiKey ?? GEMINI_API_KEY ?? "",
+			// apiVersion: "2.0"
+		});
 	}
 
 	private formatRagContext(ragData: IRagData): string {
@@ -49,7 +52,7 @@ export class GeminiAdapter {
 		const {
 			prompt,
 			numberOfImages = 1,
-			model = "gemini-2.5-flash-image",
+			model="gemini-2.5-flash-image",
 			s3KeyPrefix = "gemini-images",
 			ragData
 		} = config;
@@ -61,14 +64,11 @@ export class GeminiAdapter {
 			enhancedPrompt = prompt + ragContext;
 		}
 		console.log("---------final prompt is-----", enhancedPrompt);
-		const models = await this.ai.models.list();
-		console.log("---------available models-----", models);
-		const response: any = await this.ai.models.generateImages({
+		// const models = await this.ai.models.list();
+		// console.log("---------available models-----", models);
+		const response: any = await this.ai.models.generateContent({
 			model,
-			prompt: enhancedPrompt,
-			config: {
-				numberOfImages,
-			},
+			contents: enhancedPrompt,
 		});
 		// Upload each image buffer to S3 and return array of URLs
 		const urls: string[] = [];
