@@ -12,6 +12,7 @@ import userRouter from "./api/v1/routes/user.route";
 import instagramRouter from "./api/v1/routes/instagram/instagram.route";
 import youtubeRouter from "./api/v1/routes/youtube/youtube.route";
 import bankRouter from "./api/v1/routes/bank/bank.routes";
+import taskRouter from "./api/v1/routes/tasks/tasks.routes";
 const app = express();
 
 app.use(cookieParser());
@@ -51,6 +52,7 @@ app.use("/api/v1/facebook", Facebookrouter);
 app.use("/api/v1/ig", instagramRouter);
 app.use("/api/v1/youtube", youtubeRouter);
 app.use("/api/v1/bank", bankRouter);
+app.use("/api/v1/tasks", taskRouter);
 
 // Default route for health check
 app.get("/", (req, res) => {
