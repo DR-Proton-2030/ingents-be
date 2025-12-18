@@ -3,6 +3,6 @@ import { createWaitList } from "../../controller/waitList/waitList.controller";
 
 const waitListRouter = Router();
 
-waitListRouter.patch("/create", createWaitList);
+waitListRouter.post("/create", createWaitList);
 
 export default waitListRouter;
