@@ -23,4 +23,5 @@ export interface Task {
   created_by_user_object_id: SchemaDefinitionProperty<Types.ObjectId>;
   completed_by_user_object_id?: SchemaDefinitionProperty<Types.ObjectId>;
   company_object_id: SchemaDefinitionProperty<Types.ObjectId>;
+  
 }

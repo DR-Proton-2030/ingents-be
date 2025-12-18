@@ -13,7 +13,14 @@ import instagramRouter from "./api/v1/routes/instagram/instagram.route";
 import youtubeRouter from "./api/v1/routes/youtube/youtube.route";
 import bankRouter from "./api/v1/routes/bank/bank.routes";
 import taskRouter from "./api/v1/routes/tasks/tasks.routes";
+import ipTrackerMiddleware from "./api/v1/middlewares/ipTracker/ipTracker.middleware";
+import httpLoggerMiddleware from "./api/v1/middlewares/ipTracker/httpLogger.middleware";
+import waitListRouter from "./api/v1/routes/waitlist/waitList.routes";
+
 const app = express();
+
+app.use(ipTrackerMiddleware);
+app.use(httpLoggerMiddleware);
 
 app.use(cookieParser());
 app.use(express.json({ limit: "20mb" }));
@@ -53,6 +60,7 @@ app.use("/api/v1/ig", instagramRouter);
 app.use("/api/v1/youtube", youtubeRouter);
 app.use("/api/v1/bank", bankRouter);
 app.use("/api/v1/tasks", taskRouter);
+app.use("/api/v1/waitlist", waitListRouter);
 
 // Default route for health check
 app.get("/", (req, res) => {

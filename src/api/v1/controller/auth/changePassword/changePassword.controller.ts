@@ -17,8 +17,8 @@ export const changePassword = async (req: Request, res: Response) => {
     const tokenPayload: ItokenPayload = {
       _id: String(user?._id || ""),
       company_object_id: user?.company_object_id
-        ? user.company_object_id
-        : null,
+        ? String(user.company_object_id)
+        : "",
     };
     const token = generateToken(tokenPayload);
 

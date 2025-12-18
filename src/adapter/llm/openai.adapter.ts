@@ -44,7 +44,7 @@ export const generateOpenAiResponse = async (
       config = {
         prompt: request,
         systemMessage: systemMessage || "",
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o",
         maxTokens: 500,
         temperature: 0.7,
         topP: 0.9,
@@ -55,7 +55,7 @@ export const generateOpenAiResponse = async (
     } else {
       // New object-based configuration
       config = {
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o",
         maxTokens: 500,
         temperature: 0.7,
         topP: 0.9,
@@ -74,7 +74,7 @@ export const generateOpenAiResponse = async (
     }
 
     const response = await openai.chat.completions.create({
-      model: config.model || "gpt-3.5-turbo",
+      model: config.model || "gpt-4o",
       messages: [
         { role: "system", content: config.systemMessage },
         { role: "user", content: enhancedPrompt },
