@@ -1,0 +1,9 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const task_controller_1 = require("../../controller/task/task.controller");
+const userAuth_1 = require("../../middlewares/auth/userAuth");
+const taskRouter = (0, express_1.Router)();
+taskRouter.post("/create-task", userAuth_1.userAuth, task_controller_1.createTeask);
+taskRouter.get("/get-tasks", userAuth_1.userAuth, task_controller_1.getTasks);
+exports.default = taskRouter;

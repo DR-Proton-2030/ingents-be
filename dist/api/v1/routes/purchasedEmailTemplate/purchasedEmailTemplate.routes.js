@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const userAuth_1 = require("../../middlewares/auth/userAuth");
+const purchasedEmailTemplate_controller_1 = require("../../controller/purchasedEmailTemplate/purchasedEmailTemplate.controller");
+const router = (0, express_1.Router)();
+router.post("/", userAuth_1.userAuth, purchasedEmailTemplate_controller_1.createPurchasedEmailTemplate);
+router.get("/", userAuth_1.userAuth, purchasedEmailTemplate_controller_1.getAllPurchasedEmailTemplates);
+router.get("/:id", userAuth_1.userAuth, purchasedEmailTemplate_controller_1.getPurchasedEmailTemplateById);
+router.patch("/:id", userAuth_1.userAuth, purchasedEmailTemplate_controller_1.updatePurchasedEmailTemplate);
+router.delete("/:id", userAuth_1.userAuth, purchasedEmailTemplate_controller_1.deletePurchasedEmailTemplate);
+exports.default = router;

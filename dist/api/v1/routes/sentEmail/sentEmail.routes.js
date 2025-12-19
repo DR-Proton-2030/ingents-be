@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const userAuth_1 = require("../../middlewares/auth/userAuth");
+const sentEmail_controller_1 = require("../../controller/sentEmail/sentEmail.controller");
+const bulkEmail_controller_1 = require("../../controller/bulkEmail/bulkEmail.controller");
+const multer_middleware_1 = require("../../middlewares/helper/multer/multer.middleware");
+const router = (0, express_1.Router)();
+router.post("/excel", multer_middleware_1.upload.single("file"), bulkEmail_controller_1.bulkEmailGenerationFromExcel);
+router.post("/", userAuth_1.userAuth, sentEmail_controller_1.createSentEmail);
+router.get("/", userAuth_1.userAuth, sentEmail_controller_1.getAllSentEmails);
+router.get("/:id", userAuth_1.userAuth, sentEmail_controller_1.getSentEmailById);
+router.patch("/:id", userAuth_1.userAuth, sentEmail_controller_1.updateSentEmail);
+router.delete("/:id", userAuth_1.userAuth, sentEmail_controller_1.deleteSentEmail);
+exports.default = router;
