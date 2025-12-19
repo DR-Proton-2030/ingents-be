@@ -29,7 +29,7 @@ app.use(express.urlencoded({ limit: "20mb", extended: true }));
 // CORS Middleware (Place at the top)
 app.use(
   cors({
-    origin: ["http://localhost:3000"], // Replace * with frontend origin
+    origin: ["http://localhost:3000", "https://ingents.ai"], // Replace * with frontend origin
     credentials: true,
     allowedHeaders: [
       "Origin",
