@@ -1,12 +1,13 @@
 import { SchemaDefinitionProperty, Types } from "mongoose";
 
+export type UserRole = 'company_admin' | 'employee' | 'manager';
 export interface IUser {
   full_name: string;
   email: string;
   password: string;
   emp_id: string;
   company_object_id: SchemaDefinitionProperty<Types.ObjectId>;
-  role: string;
+  role: UserRole;
   profile_picture: string;
   facebook?: {
     project_id: string;
