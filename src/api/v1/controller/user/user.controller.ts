@@ -54,7 +54,7 @@ export const updateUser = async (req: Request, res: Response) => {
 
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { email, role } = req.body;
+    const { email, role, full_name } = req.body;
     const { company_object_id } = req.user;
 
     if (!company_object_id) {
@@ -70,6 +70,7 @@ export const createUser = async (req: Request, res: Response) => {
     const userPayload: Partial<IUser> = {
       email,
       role,
+      full_name,
       has_joined: false,
       company_object_id,
     }
