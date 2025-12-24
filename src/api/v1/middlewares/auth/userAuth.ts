@@ -4,6 +4,7 @@ import { verifyToken } from "../../../../services/verifyToken/verifyToken.servic
 export const userAuth = (req: Request, res: Response, next: NextFunction) => {
 	const token = req.cookies?.token || req.header("Authorization")?.replace("Bearer ", "");
 	console.log("token",token);
+	console.log('token', token);
 	if (!token) {
 		res.status(401).json({ message: "Unauthorized" });
 		return;

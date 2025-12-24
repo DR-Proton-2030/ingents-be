@@ -11,6 +11,8 @@ export const sendMessage = async (req: Request, res: Response) => {
     const { message, files, chatId } = req.body;
     const { _id, company_object_id } = req.user;
 
+    console.log('boddy', req.body);
+
     const agentFactory = new AgentFactory();
     let messgaeHistory: IChatMessage[] = [];
     let chatObjectId = chatId;
