@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logoutUser = exports.getUsersByClientId = exports.getUsers = exports.createUser = exports.verifyToken = exports.signIn = exports.signUp = void 0;
+exports.logoutUser = exports.getUsersByClientId = exports.verifyToken = exports.signIn = exports.signUp = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const company_model_1 = __importDefault(require("../../../../models/company/company.model"));
 const users_model_1 = __importDefault(require("../../../../models/users/users.model"));
@@ -164,60 +164,6 @@ const verifyToken = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     }
 });
 exports.verifyToken = verifyToken;
-const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { user_details, profile_picture } = req.body;
-        const { company_object_id } = req.user;
-        if (!company_object_id) {
-            return res.status(400).json({ message: "Company ID is required" });
-        }
-        let user;
-        try {
-            user = JSON.parse(user_details);
-        }
-        catch (err) {
-            return res.status(400).json({ message: "Invalid user_details format" });
-        }
-        if (!user.password)
-            return res.status(400).json({ message: "Password is required" });
-        const existingUser = yield users_model_1.default.findOne({ email: user.email });
-        if (existingUser)
-            return res.status(400).json({
-                message: "User with this email already exists under this client",
-            });
-        const hashedPassword = yield (0, hashPassword_1.hashPassword)(user.password);
-        const userPayload = Object.assign(Object.assign({}, user), { password: hashedPassword, company_object_id,
-            profile_picture });
-        const userInstance = yield new users_model_1.default(userPayload).save();
-        return res.status(200).json({
-            message: "Client user created successfully",
-            data: userInstance,
-        });
-    }
-    catch (error) {
-        console.log("====> createClientUser error:", error);
-        return res.status(500).json({ message: "Something went wrong", error });
-    }
-});
-exports.createUser = createUser;
-const getUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { company_object_id } = req.user;
-        if (!company_object_id) {
-            return res.status(400).json({ message: "Company ID not found in user" });
-        }
-        const users = yield users_model_1.default.find({ company_object_id });
-        return res.status(200).json({
-            message: "Users fetched successfully",
-            data: users,
-        });
-    }
-    catch (error) {
-        console.error("Error fetching users:", error);
-        return res.status(500).json({ message: "Something went wrong", error });
-    }
-});
-exports.getUsers = getUsers;
 const getUsersByClientId = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { clientId } = req.params;

@@ -10,16 +10,8 @@ const userSchema: Schema<IUser> = new Schema<IUser>(
     full_name: SCHEMA_DEFINITION_PROPERTY.requiredString,
     email: { ...SCHEMA_DEFINITION_PROPERTY.requiredString, unique: true },
     company_object_id: SCHEMA_DEFINITION_PROPERTY.requiredObjectId,
-    role: {
-      type: String,
-      enum: [
-        USER_ROLES.COMPANY_ADMIN,
-        USER_ROLES.PROJECT_ADMIN,
-        USER_ROLES.USER,
-        USER_ROLES.SUPER_ADMIN,
-      ],
-      default: USER_ROLES.COMPANY_ADMIN,
-    },
+    has_joined: SCHEMA_DEFINITION_PROPERTY.requiredBoolean,
+    role: {...SCHEMA_DEFINITION_PROPERTY.requiredString, enum: USER_ROLES },
     password: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     emp_id: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     profile_picture: SCHEMA_DEFINITION_PROPERTY.optionalNullString,

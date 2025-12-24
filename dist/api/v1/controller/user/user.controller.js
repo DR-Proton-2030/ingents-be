@@ -23,7 +23,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateUser = void 0;
+exports.getUsers = exports.createUser = exports.updateUser = void 0;
 const users_model_1 = __importDefault(require("../../../../models/users/users.model"));
 const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -62,3 +62,51 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.updateUser = updateUser;
+const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { email, role } = req.body;
+        const { company_object_id } = req.user;
+        if (!company_object_id) {
+            return res.status(400).json({ message: "Company ID is required" });
+        }
+        const existingUser = yield users_model_1.default.findOne({ email: email });
+        if (existingUser)
+            return res.status(400).json({
+                message: "User with this email already exists",
+            });
+        const userPayload = {
+            email,
+            role,
+            has_joined: false,
+            company_object_id,
+        };
+        const userInstance = yield new users_model_1.default(userPayload).save();
+        return res.status(200).json({
+            message: "Client user created successfully",
+            data: userInstance,
+        });
+    }
+    catch (error) {
+        console.log("====> createClientUser error:", error);
+        return res.status(500).json({ message: "Something went wrong", error });
+    }
+});
+exports.createUser = createUser;
+const getUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { company_object_id } = req.user;
+        if (!company_object_id) {
+            return res.status(400).json({ message: "Company ID not found in user" });
+        }
+        const users = yield users_model_1.default.find({ company_object_id });
+        return res.status(200).json({
+            message: "Users fetched successfully",
+            data: users,
+        });
+    }
+    catch (error) {
+        console.error("Error fetching users:", error);
+        return res.status(500).json({ message: "Something went wrong", error });
+    }
+});
+exports.getUsers = getUsers;

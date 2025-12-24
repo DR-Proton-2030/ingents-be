@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import UserModel from "../../../../models/users/users.model";
+import { IUser } from "../../../../types/interface/user.interface";
 
 export const updateUser = async (req: Request, res: Response) => {
   try {
@@ -48,5 +49,59 @@ export const updateUser = async (req: Request, res: Response) => {
     return res
       .status(500)
       .json({ message: "User update failed", error: error.message });
+  }
+};
+
+export const createUser = async (req: Request, res: Response) => {
+  try {
+    const { email, role } = req.body;
+    const { company_object_id } = req.user;
+
+    if (!company_object_id) {
+      return res.status(400).json({ message: "Company ID is required" });
+    }
+
+    const existingUser = await UserModel.findOne({ email: email });
+    if (existingUser)
+      return res.status(400).json({
+        message: "User with this email already exists",
+      });
+
+    const userPayload: Partial<IUser> = {
+      email,
+      role,
+      has_joined: false,
+      company_object_id,
+    }
+
+    const userInstance = await new UserModel(userPayload).save();
+
+    return res.status(200).json({
+      message: "Client user created successfully",
+      data: userInstance,
+    });
+  } catch (error) {
+    console.log("====> createClientUser error:", error);
+    return res.status(500).json({ message: "Something went wrong", error });
+  }
+};
+
+export const getUsers = async (req: Request, res: Response) => {
+  try {
+    const { company_object_id } = req.user;
+
+    if (!company_object_id) {
+      return res.status(400).json({ message: "Company ID not found in user" });
+    }
+
+    const users = await UserModel.find({ company_object_id });
+
+    return res.status(200).json({
+      message: "Users fetched successfully",
+      data: users,
+    });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    return res.status(500).json({ message: "Something went wrong", error });
   }
 };

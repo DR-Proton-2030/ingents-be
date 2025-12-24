@@ -8,7 +8,7 @@ import sentEmailRouter from "./api/v1/routes/sentEmail/sentEmail.routes";
 import emailTemplateRouter from "./api/v1/routes/emailTemplate/emailTemplate.routes";
 import messageRouter from "./api/v1/routes/messages/messages.routes";
 import Facebookrouter from "./api/v1/routes/facebook/facebook.route";
-import userRouter from "./api/v1/routes/user.route";
+import userRouter from "./api/v1/routes/user/user.route";
 import instagramRouter from "./api/v1/routes/instagram/instagram.route";
 import youtubeRouter from "./api/v1/routes/youtube/youtube.route";
 import bankRouter from "./api/v1/routes/bank/bank.routes";

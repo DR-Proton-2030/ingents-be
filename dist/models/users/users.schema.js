@@ -11,16 +11,8 @@ const userSchema = new mongoose_1.Schema({
     full_name: model_constant_1.default.requiredString,
     email: Object.assign(Object.assign({}, model_constant_1.default.requiredString), { unique: true }),
     company_object_id: model_constant_1.default.requiredObjectId,
-    role: {
-        type: String,
-        enum: [
-            role_1.USER_ROLES.COMPANY_ADMIN,
-            role_1.USER_ROLES.PROJECT_ADMIN,
-            role_1.USER_ROLES.USER,
-            role_1.USER_ROLES.SUPER_ADMIN,
-        ],
-        default: role_1.USER_ROLES.COMPANY_ADMIN,
-    },
+    has_joined: model_constant_1.default.requiredBoolean,
+    role: Object.assign(Object.assign({}, model_constant_1.default.requiredString), { enum: role_1.USER_ROLES }),
     password: model_constant_1.default.optionalNullString,
     emp_id: model_constant_1.default.optionalNullString,
     profile_picture: model_constant_1.default.optionalNullString,

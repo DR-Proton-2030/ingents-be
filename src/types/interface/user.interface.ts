@@ -9,6 +9,7 @@ export interface IUser {
   company_object_id: SchemaDefinitionProperty<Types.ObjectId>;
   role: UserRole;
   profile_picture: string;
+  has_joined: boolean;
   facebook?: {
     project_id: string;
     name: string;
