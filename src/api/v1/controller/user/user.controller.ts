@@ -54,7 +54,7 @@ export const updateUser = async (req: Request, res: Response) => {
 
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { email, role } = req.body;
+    const { email, role, full_name } = req.body;
     const { company_object_id } = req.user;
 
     if (!company_object_id) {
@@ -70,6 +70,7 @@ export const createUser = async (req: Request, res: Response) => {
     const userPayload: Partial<IUser> = {
       email,
       role,
+      full_name,
       has_joined: false,
       company_object_id,
     }
@@ -102,6 +103,33 @@ export const getUsers = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error fetching users:", error);
+    return res.status(500).json({ message: "Something went wrong", error });
+  }
+};
+
+
+
+
+export const getUserById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params; // get user ID from URL
+
+    if (!id) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    const user = await UserModel.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "User fetched successfully",
+      data: user,
+    });
+  } catch (error) {
+    console.error("Error fetching user:", error);
     return res.status(500).json({ message: "Something went wrong", error });
   }
 };
