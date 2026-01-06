@@ -12,16 +12,33 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTasks = exports.createTeask = void 0;
+exports.deleteTask = exports.updateTaskStatus = exports.getTasks = exports.createTask = void 0;
 const tasks_model_1 = __importDefault(require("../../../../models/tasks/tasks.model"));
 const getTask_1 = require("../../../../services/tasks/getTask");
 const assignedTask_model_1 = __importDefault(require("../../../../models/assignedTask/assignedTask.model"));
-const createTeask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const session = yield tasks_model_1.default.db.startSession();
+const mongoose_1 = __importDefault(require("mongoose"));
+const taskStatus_1 = require("../../../../constants/taskStatus/taskStatus");
+const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const session = yield mongoose_1.default.startSession();
     session.startTransaction();
     try {
-        const { title, completed, description, parent_task_object_id, due_date, priority, status, assigned_user_list, } = req.body;
+        const { title, completed = false, description = "", parent_task_object_id = null, due_date = null, priority = "Normal", status = "pending", assigned_user_list, } = req.body;
         const { _id: user_object_id, company_object_id } = req.user;
+        // Parse assigned_user_list safely
+        let parsedAssignedUsers = [];
+        if (Array.isArray(assigned_user_list)) {
+            parsedAssignedUsers = assigned_user_list;
+        }
+        else if (typeof assigned_user_list === "string") {
+            try {
+                const parsed = JSON.parse(assigned_user_list);
+                parsedAssignedUsers = Array.isArray(parsed) ? parsed : [parsed];
+            }
+            catch (_a) {
+                parsedAssignedUsers = [assigned_user_list];
+            }
+        }
+        // Create Task
         const newTaskPayload = {
             title,
             completed,
@@ -33,40 +50,42 @@ const createTeask = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
             status,
             created_by_user_object_id: user_object_id,
             company_object_id: company_object_id,
+            assigned_user_list: parsedAssignedUsers,
         };
-        const newTask = new tasks_model_1.default(newTaskPayload);
-        const assignedTaskList = [];
-        if (assigned_user_list && assigned_user_list.length > 0) {
-            for (const assignedUserId of assigned_user_list) {
-                const assignTaskPayload = {
-                    task_object_id: newTask._id,
-                    assigned_to_user_object_id: assignedUserId,
-                    company_object_id: company_object_id,
-                    assigned_by_user_object_id: user_object_id,
-                    assigned_at: new Date(),
-                };
-                assignedTaskList.push(assignTaskPayload);
-            }
-        }
-        yield newTask.save({ session });
-        if (assignedTaskList.length > 0) {
-            yield assignedTask_model_1.default.insertMany(assignedTaskList, { session });
+        const newTask = yield new tasks_model_1.default(newTaskPayload).save({ session });
+        // Create Assigned Task entries
+        if (parsedAssignedUsers.length > 0) {
+            const assignedTasks = parsedAssignedUsers.map((uid) => ({
+                task_object_id: newTask._id,
+                assigned_to_user_object_id: uid,
+                assigned_by_user_object_id: user_object_id,
+                company_object_id: company_object_id,
+                assigned_at: new Date(),
+            }));
+            yield assignedTask_model_1.default.insertMany(assignedTasks, { session });
         }
         yield session.commitTransaction();
-        res
-            .status(201)
-            .json({ message: "Task created successfully", data: newTask });
+        // Populate assigned users using virtual (full_name only)
+        const assignedTasks = yield assignedTask_model_1.default.find({ task_object_id: newTask._id })
+            .populate("user_details", "full_name") // use virtual
+            .lean();
+        const responseTask = Object.assign(Object.assign({}, newTask.toObject()), { assignedTasks });
+        res.status(201).json({
+            message: "Task created successfully",
+            data: responseTask,
+        });
     }
     catch (error) {
         if (session.inTransaction())
             yield session.abortTransaction();
-        res.status(500).json({ message: "Internal server error", error });
+        console.error("Create Task Error:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
     finally {
         session.endSession();
     }
 });
-exports.createTeask = createTeask;
+exports.createTask = createTask;
 const getTasks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { company_object_id } = req.user;
@@ -83,3 +102,45 @@ const getTasks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.getTasks = getTasks;
+const updateTaskStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { taskId } = req.params;
+        const { status } = req.body;
+        if (!Object.values(taskStatus_1.TASK_STATUSES).includes(status)) {
+            return res.status(400).json({
+                message: "Invalid task status",
+                allowedStatuses: Object.values(taskStatus_1.TASK_STATUSES),
+            });
+        }
+        const task = yield tasks_model_1.default.findByIdAndUpdate(taskId, { status }, { new: true });
+        if (!task) {
+            return res.status(404).json({ message: "Task not found" });
+        }
+        return res.status(200).json({
+            message: "Task status updated",
+            task,
+        });
+    }
+    catch (error) {
+        console.error("Update task status error:", error);
+        return res.status(500).json({ message: "Server error" });
+    }
+});
+exports.updateTaskStatus = updateTaskStatus;
+const deleteTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { taskId } = req.params;
+        const task = yield tasks_model_1.default.findByIdAndDelete(taskId);
+        if (!task) {
+            return res.status(404).json({ message: "Task not found" });
+        }
+        return res.status(200).json({
+            message: "Task deleted successfully",
+        });
+    }
+    catch (error) {
+        console.error("Delete task error:", error);
+        return res.status(500).json({ message: "Server error" });
+    }
+});
+exports.deleteTask = deleteTask;

@@ -11,7 +11,11 @@ const userSchema = new mongoose_1.Schema({
     full_name: model_constant_1.default.requiredString,
     email: Object.assign(Object.assign({}, model_constant_1.default.requiredString), { unique: true }),
     company_object_id: model_constant_1.default.requiredObjectId,
-    has_joined: model_constant_1.default.requiredBoolean,
+    has_joined: {
+        type: Boolean,
+        required: true,
+        default: false,
+    },
     role: Object.assign(Object.assign({}, model_constant_1.default.requiredString), { enum: role_1.USER_ROLES }),
     password: model_constant_1.default.optionalNullString,
     emp_id: model_constant_1.default.optionalNullString,

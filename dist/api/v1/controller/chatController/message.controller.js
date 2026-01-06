@@ -16,6 +16,7 @@ const sendMessage = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     try {
         const { message, files, chatId } = req.body;
         const { _id, company_object_id } = req.user;
+        console.log('boddy', req.body);
         const agentFactory = new Agent_factory_1.AgentFactory();
         let messgaeHistory = [];
         let chatObjectId = chatId;

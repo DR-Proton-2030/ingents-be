@@ -23,7 +23,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUsers = exports.createUser = exports.updateUser = void 0;
+exports.searchUsers = exports.getUserById = exports.getUsers = exports.createUser = exports.updateUser = void 0;
 const users_model_1 = __importDefault(require("../../../../models/users/users.model"));
 const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -64,7 +64,7 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 exports.updateUser = updateUser;
 const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { email, role } = req.body;
+        const { email, role, full_name } = req.body;
         const { company_object_id } = req.user;
         if (!company_object_id) {
             return res.status(400).json({ message: "Company ID is required" });
@@ -77,6 +77,7 @@ const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         const userPayload = {
             email,
             role,
+            full_name,
             has_joined: false,
             company_object_id,
         };
@@ -110,3 +111,52 @@ const getUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.getUsers = getUsers;
+const getUserById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params; // get user ID from URL
+        if (!id) {
+            return res.status(400).json({ message: "User ID is required" });
+        }
+        const user = yield users_model_1.default.findById(id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        return res.status(200).json({
+            message: "User fetched successfully",
+            data: user,
+        });
+    }
+    catch (error) {
+        console.error("Error fetching user:", error);
+        return res.status(500).json({ message: "Something went wrong", error });
+    }
+});
+exports.getUserById = getUserById;
+const searchUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { query = "" } = req.query;
+        const { company_object_id } = req.user;
+        const safeQuery = typeof query === "string"
+            ? query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+            : "";
+        const filter = {
+            company_object_id,
+        };
+        if (safeQuery) {
+            filter.$or = [
+                { full_name: { $regex: `^${safeQuery}`, $options: "i" } },
+                { email: { $regex: `^${safeQuery}`, $options: "i" } },
+            ];
+        }
+        const users = yield users_model_1.default.find(filter)
+            .select("_id full_name email role")
+            .limit(20)
+            .lean();
+        return res.status(200).json({ data: users });
+    }
+    catch (error) {
+        console.error("Search users error:", error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+});
+exports.searchUsers = searchUsers;

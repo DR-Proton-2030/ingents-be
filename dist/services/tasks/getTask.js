@@ -16,26 +16,33 @@ exports.getTaskService = void 0;
 const tasks_model_1 = __importDefault(require("../../models/tasks/tasks.model"));
 const assignedTask_model_1 = __importDefault(require("../../models/assignedTask/assignedTask.model"));
 const getTaskService = (filter, startIndex, endIndex) => __awaiter(void 0, void 0, void 0, function* () {
-    // Fetch all tasks matching the filter (pagination will be applied after nesting)
+    // Fetch all tasks matching the filter
     const allTasks = yield tasks_model_1.default.find(filter);
-    // Build a map of tasks by their _id for quick lookup
+    // Build a map of tasks by _id for quick lookup
     const taskMap = {};
     for (const task of allTasks) {
         taskMap[String(task._id)] = Object.assign(Object.assign({}, task.toObject()), { subtask: [], assignees: [] });
     }
-    // Fetch assignees for all tasks in parallel
-    const assigneePromises = allTasks.map((task) => __awaiter(void 0, void 0, void 0, function* () {
-        const assigned = yield assignedTask_model_1.default.find({ task_object_id: task._id });
-        // Collect assigned_to_user_object_id for each assignment
-        return {
-            taskId: String(task._id),
-            assignees: assigned.map(a => a.assigned_to_user_object_id)
-        };
-    }));
-    const assigneeResults = yield Promise.all(assigneePromises);
-    for (const { taskId, assignees } of assigneeResults) {
-        if (taskMap[taskId]) {
-            taskMap[taskId].assignees = assignees;
+    const assignedTasks = yield assignedTask_model_1.default.find({
+        task_object_id: { $in: allTasks.map(t => t._id) }
+    })
+        .populate("user_details", "full_name")
+        .lean();
+    // Map assignees to the expected object shape
+    for (const assigned of assignedTasks) {
+        const taskId = String(assigned.task_object_id);
+        if (taskMap[taskId] && assigned.user_details) {
+            const user = assigned.user_details;
+            taskMap[taskId].assignees.push({
+                _id: user._id,
+                full_name: user.full_name,
+                initials: user.full_name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase(),
+                color: "", // AvatarGroup will generate a random color if empty
+            });
         }
     }
     // Build the tree: assign each task to its parent's subtask array if it has a parent

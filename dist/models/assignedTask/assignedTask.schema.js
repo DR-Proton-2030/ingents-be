@@ -14,3 +14,10 @@ exports.assignedTaskSchema = new mongoose_1.Schema({
     company_object_id: model_constant_1.default.requiredObjectId,
     assigned_at: model_constant_1.default.requiredDate,
 }, Object.assign(Object.assign({}, schemaOption_1.GENERAL_SCHEMA_OPTIONS), { toJSON: { virtuals: true }, toObject: { virtuals: true } }));
+const UserVirtualReference = {
+    ref: "users",
+    localField: "assigned_to_user_object_id",
+    foreignField: "_id",
+    justOne: true,
+};
+exports.assignedTaskSchema.virtual("user_details", UserVirtualReference);
