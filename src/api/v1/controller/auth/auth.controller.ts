@@ -120,8 +120,6 @@ export const signUp = async (req: Request, res: Response) => {
 
 
 export const signIn = async (req: Request, res: Response) => {
-  console.log("==========> Req Body:", req.body);
-
   try {
     const { email, password } = req.body;
 
@@ -170,7 +168,7 @@ export const signIn = async (req: Request, res: Response) => {
     res.cookie("token", token, {
       httpOnly: true,
       secure: NODE_ENV === "production",
-      sameSite: NODE_ENV === "production" ? "none" : "lax",
+      sameSite: NODE_ENV === "production" ? "none" : "strict",
       path: "/",
       maxAge: 3 * 60 * 60 * 1000,
       ...(NODE_ENV === "production" && { domain: ".ingents.ai" }), // ✅ SAFE
@@ -240,9 +238,9 @@ export const logoutUser = async (req: Request, res: Response) => {
     res.clearCookie("token", {
       httpOnly: true, // Prevents JavaScript access (XSS protection)
       secure: NODE_ENV === "production", // Use secure cookies in production
-      sameSite: NODE_ENV === "production" ? "none" : "lax",
+      sameSite: NODE_ENV === "production" ? "none" : "strict",
       path: "/", // Makes cookie accessible across the entire app
-      domain: NODE_ENV === "production" ? ".bidready.com" : "localhost",
+      domain: NODE_ENV === "production" ? ".ingents.ai" : "localhost",
     });
     res.status(200).json({
       message: "User logged out successfully",

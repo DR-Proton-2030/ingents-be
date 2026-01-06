@@ -103,7 +103,6 @@ const signUp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.signUp = signUp;
 const signIn = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    console.log("==========> Req Body:", req.body);
     try {
         const { email, password } = req.body;
         // 1️⃣ Find user
@@ -139,7 +138,7 @@ const signIn = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const userObj = user.toObject();
         delete userObj.password;
         // 5️⃣ Set cookie (FIXED)
-        res.cookie("token", token, Object.assign({ httpOnly: true, secure: config_1.NODE_ENV === "production", sameSite: config_1.NODE_ENV === "production" ? "none" : "lax", path: "/", maxAge: 3 * 60 * 60 * 1000 }, (config_1.NODE_ENV === "production" && { domain: ".ingents.ai" })));
+        res.cookie("token", token, Object.assign({ httpOnly: true, secure: config_1.NODE_ENV === "production", sameSite: config_1.NODE_ENV === "production" ? "none" : "strict", path: "/", maxAge: 3 * 60 * 60 * 1000 }, (config_1.NODE_ENV === "production" && { domain: ".ingents.ai" })));
         // 6️⃣ Response
         return res.status(200).json({
             message: "User logged in successfully",
@@ -199,9 +198,9 @@ const logoutUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         res.clearCookie("token", {
             httpOnly: true, // Prevents JavaScript access (XSS protection)
             secure: config_1.NODE_ENV === "production", // Use secure cookies in production
-            sameSite: config_1.NODE_ENV === "production" ? "none" : "lax",
+            sameSite: config_1.NODE_ENV === "production" ? "none" : "strict",
             path: "/", // Makes cookie accessible across the entire app
-            domain: config_1.NODE_ENV === "production" ? ".bidready.com" : "localhost",
+            domain: config_1.NODE_ENV === "production" ? ".ingents.ai" : "localhost",
         });
         res.status(200).json({
             message: "User logged out successfully",
