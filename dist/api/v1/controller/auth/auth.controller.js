@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logoutUser = exports.getUsersByClientId = exports.verifyToken = exports.signIn = exports.signUp = void 0;
+exports.setupPassword = exports.logoutUser = exports.getUsersByClientId = exports.verifyToken = exports.signIn = exports.signUp = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const company_model_1 = __importDefault(require("../../../../models/company/company.model"));
 const users_model_1 = __importDefault(require("../../../../models/users/users.model"));
@@ -106,41 +106,53 @@ const signIn = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     console.log("==========> Req Body:", req.body);
     try {
         const { email, password } = req.body;
+        // 1️⃣ Find user
         const user = yield users_model_1.default.findOne({ email }).populate("company_details");
         if (!user) {
-            console.log("User not found");
-            return res.status(404).json({ message: "User not found" });
+            return res.status(404).json({
+                message: "User not found",
+            });
         }
+        // 🔴 IMPORTANT: password not set (invited user)
+        if (!user.password) {
+            return res.status(400).json({
+                message: "Please set your password first",
+                code: "PASSWORD_NOT_SET",
+                redirect: "/setup-password",
+            });
+        }
+        // 2️⃣ Validate password (SAFE now)
         const isMatchPassword = yield (0, comparePassword_1.comparePassword)(password, user.password);
         if (!isMatchPassword) {
-            return res.status(401).json({ message: "Wrong password" });
+            return res.status(401).json({
+                message: "Wrong password",
+            });
         }
+        // 3️⃣ Generate token
         const tokenPayload = {
             company_object_id: String(user.company_object_id),
             _id: String(user._id),
-            role: "user",
+            role: user.role || "user",
         };
         const token = (0, generateToken_service_1.default)(tokenPayload);
-        delete user.password; // Remove password from response
-        res.cookie("token", token, {
-            httpOnly: true, // Prevents JavaScript access (XSS protection)
-            secure: config_1.NODE_ENV === "production", // Use secure cookies in production
-            sameSite: config_1.NODE_ENV === "production" ? "none" : "lax",
-            path: "/", // Makes cookie accessible across the entire app
-            maxAge: 3 * 60 * 60 * 1000, // 3 hours expiration
-            domain: config_1.NODE_ENV === "production" ? ".ingents.ai" : "localhost", // Set domain for production
-        });
-        console.log("====> User logged in:", user);
+        // 4️⃣ Sanitize user object
+        const userObj = user.toObject();
+        delete userObj.password;
+        // 5️⃣ Set cookie (FIXED)
+        res.cookie("token", token, Object.assign({ httpOnly: true, secure: config_1.NODE_ENV === "production", sameSite: config_1.NODE_ENV === "production" ? "none" : "lax", path: "/", maxAge: 3 * 60 * 60 * 1000 }, (config_1.NODE_ENV === "production" && { domain: ".ingents.ai" })));
+        // 6️⃣ Response
         return res.status(200).json({
             message: "User logged in successfully",
             data: {
-                user,
-                token,
+                user: Object.assign(Object.assign({}, userObj), { has_joined: user.has_joined }),
             },
         });
     }
     catch (error) {
-        return res.status(500).json({ message: "Something went wrong", error });
+        console.error("Sign in error:", error);
+        return res.status(500).json({
+            message: "Something went wrong",
+        });
     }
 });
 exports.signIn = signIn;
@@ -203,3 +215,22 @@ const logoutUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.logoutUser = logoutUser;
+const setupPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { newPassword } = req.body;
+        const { company_object_id } = req.user;
+        if (!company_object_id) {
+            return res.status(400).json({ message: "Company ID is required" });
+        }
+        const hashedPassword = yield (0, hashPassword_1.hashPassword)(newPassword);
+        yield users_model_1.default.updateMany({ company_object_id }, { $set: { password: hashedPassword } });
+        return res.status(200).json({
+            message: "Password setup successfully for all users in the company",
+        });
+    }
+    catch (error) {
+        console.error("Error setting up password:", error);
+        return res.status(500).json({ message: "Something went wrong", error });
+    }
+});
+exports.setupPassword = setupPassword;

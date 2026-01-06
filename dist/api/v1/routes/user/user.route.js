@@ -5,5 +5,8 @@ const user_controller_1 = require("../../controller/user/user.controller");
 const userAuth_1 = require("../../middlewares/auth/userAuth");
 const userRouter = (0, express_1.Router)();
 userRouter.post("/create-user", userAuth_1.userAuth, user_controller_1.createUser);
+userRouter.get("/get-user", userAuth_1.userAuth, user_controller_1.getUsers);
+userRouter.get("/get-user-details/:id", user_controller_1.getUserById);
 userRouter.patch("/update-user", userAuth_1.userAuth, user_controller_1.updateUser);
+userRouter.get("/search-users", userAuth_1.userAuth, user_controller_1.searchUsers);
 exports.default = userRouter;
