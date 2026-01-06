@@ -169,3 +169,64 @@ export const deleteTask = async (req: Request, res: Response) => {
 };
 
 
+export const unassignTaskFromUser = async (req: Request, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { taskId, userId } = req.params;
+    const { company_object_id } = req.user;
+
+    if (!taskId || !userId) {
+      return res.status(400).json({
+        message: "taskId and userId are required",
+      });
+    }
+
+    // 1️⃣ Ensure task exists & belongs to company
+    const task = await TaskModel.findOne({
+      _id: taskId,
+      company_object_id,
+    }).session(session);
+
+    if (!task) {
+      return res.status(404).json({
+        message: "Task not found",
+      });
+    }
+
+    // 2️⃣ Remove user from task.assigned_user_list
+    await TaskModel.updateOne(
+      { _id: taskId },
+      { $pull: { assigned_user_list: userId } },
+      { session }
+    );
+
+    // 3️⃣ Delete assigned task record
+    await AssignedTaskModel.deleteOne(
+      {
+        task_object_id: taskId,
+        assigned_to_user_object_id: userId,
+        company_object_id,
+      },
+      { session }
+    );
+
+    await session.commitTransaction();
+
+    return res.status(200).json({
+      message: "User unassigned from task successfully",
+    });
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+
+    console.error("Unassign Task Error:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  } finally {
+    session.endSession();
+  }
+};
