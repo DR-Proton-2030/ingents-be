@@ -1,12 +1,15 @@
 import { SchemaDefinitionProperty, Types } from "mongoose";
+import { TASK_STATUSES } from "../../constants/taskStatus/taskStatus";
 
 export type TaskPriority = "urgent" | "normal" | "low";
-
 export type TaskStatus =
-  | "in-progress"
-  | "ready-to-check"
-  | "completed"
-  | "backlog";
+  typeof TASK_STATUSES[keyof typeof TASK_STATUSES];
+
+// export type TaskStatus =
+//   | "in-progress"
+//   | "ready-to-check"
+//   | "completed"
+//   | "backlog";
 
 export interface Task {
   title: string;
@@ -23,5 +26,6 @@ export interface Task {
   created_by_user_object_id: SchemaDefinitionProperty<Types.ObjectId>;
   completed_by_user_object_id?: SchemaDefinitionProperty<Types.ObjectId>;
   company_object_id: SchemaDefinitionProperty<Types.ObjectId>;
+  assigned_user_list?: SchemaDefinitionProperty<Types.ObjectId>[];
   
 }

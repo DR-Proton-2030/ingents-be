@@ -10,7 +10,11 @@ const userSchema: Schema<IUser> = new Schema<IUser>(
     full_name: SCHEMA_DEFINITION_PROPERTY.requiredString,
     email: { ...SCHEMA_DEFINITION_PROPERTY.requiredString, unique: true },
     company_object_id: SCHEMA_DEFINITION_PROPERTY.requiredObjectId,
-    has_joined: SCHEMA_DEFINITION_PROPERTY.requiredBoolean,
+     has_joined: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
     role: {...SCHEMA_DEFINITION_PROPERTY.requiredString, enum: USER_ROLES },
     password: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     emp_id: SCHEMA_DEFINITION_PROPERTY.optionalNullString,

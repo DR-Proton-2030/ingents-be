@@ -118,49 +118,83 @@ export const signUp = async (req: Request, res: Response) => {
   }
 };
 
+
 export const signIn = async (req: Request, res: Response) => {
   console.log("==========> Req Body:", req.body);
+
   try {
     const { email, password } = req.body;
+
+    // 1️⃣ Find user
     const user: any = await UserModel.findOne({ email }).populate(
       "company_details"
     );
+
     if (!user) {
-      console.log("User not found");
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({
+        message: "User not found",
+      });
     }
+
+    // 🔴 IMPORTANT: password not set (invited user)
+    if (!user.password) {
+      return res.status(400).json({
+        message: "Please set your password first",
+        code: "PASSWORD_NOT_SET",
+        redirect: "/setup-password",
+      });
+    }
+
+    // 2️⃣ Validate password (SAFE now)
     const isMatchPassword = await comparePassword(password, user.password);
     if (!isMatchPassword) {
-      return res.status(401).json({ message: "Wrong password" });
+      return res.status(401).json({
+        message: "Wrong password",
+      });
     }
+
+    // 3️⃣ Generate token
     const tokenPayload: ItokenPayload = {
       company_object_id: String(user.company_object_id),
       _id: String(user._id),
-      role: "user",
+      role: user.role || "user",
     };
-    const token: string = generateToken(tokenPayload);
-    delete user.password; // Remove password from response
 
+    const token: string = generateToken(tokenPayload);
+
+    // 4️⃣ Sanitize user object
+    const userObj = user.toObject();
+    delete userObj.password;
+
+    // 5️⃣ Set cookie (FIXED)
     res.cookie("token", token, {
-      httpOnly: true, // Prevents JavaScript access (XSS protection)
-      secure: NODE_ENV === "production", // Use secure cookies in production
+      httpOnly: true,
+      secure: NODE_ENV === "production",
       sameSite: NODE_ENV === "production" ? "none" : "lax",
-      path: "/", // Makes cookie accessible across the entire app
-      maxAge: 3 * 60 * 60 * 1000, // 3 hours expiration
-      domain: NODE_ENV === "production" ? ".ingents.ai" : "localhost", // Set domain for production
+      path: "/",
+      maxAge: 3 * 60 * 60 * 1000,
+      ...(NODE_ENV === "production" && { domain: ".ingents.ai" }), // ✅ SAFE
     });
-    console.log("====> User logged in:", user);
+
+    // 6️⃣ Response
     return res.status(200).json({
       message: "User logged in successfully",
       data: {
-        user,
-        token,
+        user: {
+          ...userObj,
+          has_joined: user.has_joined,
+        },
       },
     });
   } catch (error) {
-    return res.status(500).json({ message: "Something went wrong", error });
+    console.error("Sign in error:", error);
+    return res.status(500).json({
+      message: "Something went wrong",
+    });
   }
 };
+
+
 
 export const verifyToken = async (req: Request, res: Response) => {
   try {
@@ -218,5 +252,29 @@ export const logoutUser = async (req: Request, res: Response) => {
     res.status(500).json({
       message: "Internal server error",
     });
+  }
+};
+
+
+export const setupPassword = async (req: Request, res: Response) => {
+  try {
+    const { newPassword } = req.body;  
+    const { company_object_id } = req.user;
+
+    if (!company_object_id) {
+      return res.status(400).json({ message: "Company ID is required" });
+    }
+    const hashedPassword = await hashPassword(newPassword);
+
+    await UserModel.updateMany(
+      { company_object_id },
+      { $set: { password: hashedPassword } }
+    );
+    return res.status(200).json({
+      message: "Password setup successfully for all users in the company",
+    });
+  } catch (error) {
+    console.error("Error setting up password:", error);
+    return res.status(500).json({ message: "Something went wrong", error });
   }
 };

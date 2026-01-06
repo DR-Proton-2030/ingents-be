@@ -133,3 +133,36 @@ export const getUserById = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "Something went wrong", error });
   }
 };
+
+export const searchUsers = async (req: Request, res: Response) => {
+  try {
+    const { query = "" } = req.query;
+    const { company_object_id } = req.user;
+
+    const safeQuery =
+      typeof query === "string"
+        ? query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+        : "";
+
+    const filter: any = {
+      company_object_id,
+    };
+
+    if (safeQuery) {
+      filter.$or = [
+        { full_name: { $regex: `^${safeQuery}`, $options: "i" } },
+        { email: { $regex: `^${safeQuery}`, $options: "i" } },
+      ];
+    }
+
+    const users = await UserModel.find(filter)
+      .select("_id full_name email role")
+      .limit(20)
+      .lean();
+
+    return res.status(200).json({ data: users });
+  } catch (error) {
+    console.error("Search users error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
