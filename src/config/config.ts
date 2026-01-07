@@ -22,3 +22,5 @@ export const RAG_CONFIG = {
 
 export const SETU_CLIENT_ID = process.env.SETU_CLIENT_ID;
 export const SETU_CLIENT_SECRET = process.env.SETU_CLIENT_SECRET;
+
+export const FRONTEND_URL = process.env.FRONTEND_URL;

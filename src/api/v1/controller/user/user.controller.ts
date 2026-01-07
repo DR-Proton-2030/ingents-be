@@ -1,6 +1,10 @@
 import { Request, Response } from "express";
 import UserModel from "../../../../models/users/users.model";
 import { IUser } from "../../../../types/interface/user.interface";
+import generateToken from "../../../../services/generateToken/generateToken.service";
+import { ItokenPayload } from "../../../../types/interface/tokenPayload.interface";
+import { FRONTEND_URL } from "../../../../config/config";
+import { callMailServer } from "../../../../services/callMailServer/callMailServer";
 
 export const updateUser = async (req: Request, res: Response) => {
   try {
@@ -77,6 +81,22 @@ export const createUser = async (req: Request, res: Response) => {
 
     const userInstance = await new UserModel(userPayload).save();
 
+    const tokenPayload : ItokenPayload = {
+      _id: userInstance._id.toString(),
+      role,
+      company_object_id: company_object_id.toString()
+    }
+
+    const token = generateToken(tokenPayload);
+
+    const resetUrl = `${FRONTEND_URL}/setup-password?token=${token}`;
+
+    await callMailServer("invite-user", {
+      email,
+      user_name: full_name || "User",
+      password_setup_url: resetUrl
+    })
+
     return res.status(200).json({
       message: "Client user created successfully",
       data: userInstance,
@@ -106,9 +126,6 @@ export const getUsers = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "Something went wrong", error });
   }
 };
-
-
-
 
 export const getUserById = async (req: Request, res: Response) => {
   try {

@@ -192,8 +192,6 @@ export const signIn = async (req: Request, res: Response) => {
   }
 };
 
-
-
 export const verifyToken = async (req: Request, res: Response) => {
   try {
     const { _id, company_object_id } = req.user ;
@@ -253,20 +251,16 @@ export const logoutUser = async (req: Request, res: Response) => {
   }
 };
 
-
 export const setupPassword = async (req: Request, res: Response) => {
   try {
     const { newPassword } = req.body;  
-    const { company_object_id } = req.user;
+    const { _id } = req.user;
 
-    if (!company_object_id) {
-      return res.status(400).json({ message: "Company ID is required" });
-    }
     const hashedPassword = await hashPassword(newPassword);
 
-    await UserModel.updateMany(
-      { company_object_id },
-      { $set: { password: hashedPassword } }
+    await UserModel.findByIdAndUpdate(
+      _id,
+      { $set: { password: hashedPassword, has_joined: true } }
     );
     return res.status(200).json({
       message: "Password setup successfully for all users in the company",

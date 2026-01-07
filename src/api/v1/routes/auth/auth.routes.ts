@@ -3,7 +3,6 @@ import { userAuth } from "../../middlewares/auth/userAuth";
 import {  getUsersByClientId, logoutUser, setupPassword, signIn, signUp, verifyToken } from "../../controller/auth/auth.controller";
 import { fileUploadHelper } from "../../middlewares/helper/fileUpload.helper";
 import { upload } from "../../middlewares/helper/multer/multer.middleware";
-import { changePassword } from "../../controller/auth/changePassword/changePassword.controller";
 import { googleSignUp } from "../../controller/auth/googleAuth.controller";
 import { generateOtp } from "../../controller/auth/generateOtp.controller";
 
@@ -15,7 +14,6 @@ authRouter.post("/login", signIn);
 authRouter.post("/verify-token", userAuth, verifyToken);
 authRouter.post("/get-otp", generateOtp);
 authRouter.post("/setup-password", userAuth, setupPassword);
-authRouter.patch("/change-password", changePassword);
 authRouter.route("/logout").post(userAuth, logoutUser);
 
 export default authRouter;
