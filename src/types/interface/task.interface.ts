@@ -27,5 +27,9 @@ export interface Task {
   completed_by_user_object_id?: SchemaDefinitionProperty<Types.ObjectId>;
   company_object_id: SchemaDefinitionProperty<Types.ObjectId>;
   assigned_user_list?: SchemaDefinitionProperty<Types.ObjectId>[];
+  assigned_users_info?: {
+    full_name: string;
+    email?: string;
+  }[];
   
 }

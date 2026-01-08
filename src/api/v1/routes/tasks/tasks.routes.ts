@@ -1,5 +1,5 @@
 import { Router } from "express";
-import {  createTask, deleteTask, getTasks, unassignTaskFromUser, updateTaskStatus } from "../../controller/task/task.controller";
+import {   assignTaskToUser, createTask, deleteTask, getTasks, unassignTaskFromUser, updateTaskStatus } from "../../controller/task/task.controller";
 import { userAuth } from "../../middlewares/auth/userAuth";
 
 const taskRouter = Router();
@@ -12,6 +12,11 @@ taskRouter.delete(
   "/unassign/:taskId/:userId",
   userAuth,
   unassignTaskFromUser
+);
+taskRouter.post(
+  "/assign/:taskId/:userId",
+  userAuth,
+  assignTaskToUser
 );
 
 export default taskRouter;
