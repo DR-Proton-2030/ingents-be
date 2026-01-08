@@ -356,12 +356,20 @@ export const unassignTaskFromUser = async (req: Request, res: Response) => {
 
   try {
     const { taskId, userId } = req.params;
-    const { company_object_id } = req.user;
+    const { _id:user_object_id, company_object_id } = req.user;
+
+  
 
     if (!taskId || !userId) {
       return res.status(400).json({
         message: "taskId and userId are required",
       });
+    }
+
+       // Check if user exists
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
 
     // Ensure task exists & belongs to company
@@ -395,6 +403,26 @@ export const unassignTaskFromUser = async (req: Request, res: Response) => {
 
     await session.commitTransaction();
 
+  const assigningUser = await UserModel.findById(user_object_id)
+      .select("full_name")
+      .lean();
+    
+    const assignedByName =
+      typeof assigningUser?.full_name === "string"
+        ? assigningUser.full_name
+        : "Admin";
+
+    try {
+      await callMailServer("task-unassignment", {
+        email: user.email,
+        user_name: user.full_name,
+        taskTitle: task.title,
+        assignedBy: assignedByName || "Admin",
+      });
+      console.log(`✅ Email sent to ${user.email}`);
+    } catch (mailError) {
+      console.error("Error sending email:", mailError);
+    }
     return res.status(200).json({
       message: "User unassigned from task successfully",
     });
@@ -410,4 +438,26 @@ export const unassignTaskFromUser = async (req: Request, res: Response) => {
   } finally {
     session.endSession();
   }
+};
+
+export const editTask = async (req: Request, res: Response) => {
+  try {
+    const { taskId } = req.params;
+    const updateData = req.body;
+    const updatedTask = await TaskModel.findByIdAndUpdate(
+      taskId,
+      updateData,
+      { new: true }
+    );
+    if (!updatedTask) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+    res.status(200).json({
+      message: "Task updated successfully",
+      data: updatedTask,
+    });
+  } catch (error) {
+    console.error("Edit Task Error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  } 
 };
