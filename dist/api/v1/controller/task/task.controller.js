@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteTask = exports.updateTaskStatus = exports.getTasks = exports.createTask = void 0;
+exports.unassignTaskFromUser = exports.deleteTask = exports.updateTaskStatus = exports.getTasks = exports.createTask = void 0;
 const tasks_model_1 = __importDefault(require("../../../../models/tasks/tasks.model"));
 const getTask_1 = require("../../../../services/tasks/getTask");
 const assignedTask_model_1 = __importDefault(require("../../../../models/assignedTask/assignedTask.model"));
@@ -144,3 +144,51 @@ const deleteTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.deleteTask = deleteTask;
+const unassignTaskFromUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const session = yield mongoose_1.default.startSession();
+    session.startTransaction();
+    try {
+        const { taskId, userId } = req.params;
+        const { company_object_id } = req.user;
+        if (!taskId || !userId) {
+            return res.status(400).json({
+                message: "taskId and userId are required",
+            });
+        }
+        // 1️⃣ Ensure task exists & belongs to company
+        const task = yield tasks_model_1.default.findOne({
+            _id: taskId,
+            company_object_id,
+        }).session(session);
+        if (!task) {
+            return res.status(404).json({
+                message: "Task not found",
+            });
+        }
+        // 2️⃣ Remove user from task.assigned_user_list
+        yield tasks_model_1.default.updateOne({ _id: taskId }, { $pull: { assigned_user_list: userId } }, { session });
+        // 3️⃣ Delete assigned task record
+        yield assignedTask_model_1.default.deleteOne({
+            task_object_id: taskId,
+            assigned_to_user_object_id: userId,
+            company_object_id,
+        }, { session });
+        yield session.commitTransaction();
+        return res.status(200).json({
+            message: "User unassigned from task successfully",
+        });
+    }
+    catch (error) {
+        if (session.inTransaction()) {
+            yield session.abortTransaction();
+        }
+        console.error("Unassign Task Error:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+        });
+    }
+    finally {
+        session.endSession();
+    }
+});
+exports.unassignTaskFromUser = unassignTaskFromUser;

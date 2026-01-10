@@ -8,4 +8,5 @@ taskRouter.post("/create-task", userAuth_1.userAuth, task_controller_1.createTas
 taskRouter.get("/get-tasks", userAuth_1.userAuth, task_controller_1.getTasks);
 taskRouter.patch("/update-task-status/:taskId", userAuth_1.userAuth, task_controller_1.updateTaskStatus);
 taskRouter.delete("/delete-task/:taskId", userAuth_1.userAuth, task_controller_1.deleteTask);
+taskRouter.delete("/unassign/:taskId/:userId", userAuth_1.userAuth, task_controller_1.unassignTaskFromUser);
 exports.default = taskRouter;
