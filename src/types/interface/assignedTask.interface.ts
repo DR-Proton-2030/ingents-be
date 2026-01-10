@@ -7,3 +7,10 @@ export interface IAssignedTask {
     company_object_id: SchemaDefinitionProperty<Types.ObjectId>;
     assigned_at: Date;
 }
+
+export interface AssignedTaskWithUser extends IAssignedTask {
+  user_details?: {
+    full_name: string;
+    email?: string;
+  };
+};
