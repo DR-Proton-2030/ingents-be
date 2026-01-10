@@ -14,18 +14,18 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 // 🔑 AUTH
-router.get("/facebook", facebookLogin);
-router.get("/facebook/callback", facebookAuthCallback);
+router.get("/login", facebookLogin);
+router.get("/callback", facebookAuthCallback);
 
 // 📄 PAGES
-router.get("/facebook/get-pages", fetchFacebookPages);
+router.get("/get-pages", fetchFacebookPages);
 
 // 🔐 TOKEN
 router.patch("/facebook/get-long-live-token", getAccessTokenLongTerm);
 
 // 📝 POST
 router.post(
-  "/facebook/post",
+  "/post",
   upload.fields([
     { name: "image", maxCount: 1 },
     { name: "video", maxCount: 1 },

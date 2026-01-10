@@ -55,7 +55,7 @@ app.use("/api/v1/messages", messageRouter);
 app.use("/api/v1/purchased-email-templates", purchasedEmailTemplateRouter);
 app.use("/api/v1/sent-emails", sentEmailRouter);
 app.use("/api/v1/email-templates", emailTemplateRouter);
-app.use("/api/v1/fa", Facebookrouter);
+app.use("/api/v1/facebook", Facebookrouter);
 app.use("/api/v1/ig", instagramRouter);
 app.use("/api/v1/youtube", youtubeRouter);
 app.use("/api/v1/bank", bankRouter);
