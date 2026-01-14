@@ -323,6 +323,48 @@ export const getMeetingById = async (req: Request, res: Response) => {
         return res.status(500).json({ message: "Internal server error", error });
     }
 };
+export const getMeetingByCode = async (req: Request, res: Response) => {
+    try {
+        const { meetingCode } = req.params;
+        const { company_object_id } = req.user;
+
+        const meeting = await ScheduledMeetingModel.findOne({
+            meeting_code: meetingCode,
+            company_object_id,
+        })
+            .populate("host_details", "full_name email")
+            .populate("parent_meeting")
+            .lean();
+
+        if (!meeting) {
+            return res.status(404).json({ message: "Meeting not found" });
+        }
+
+        const participants = await MeetingParticipantModel.find({ meeting_object_id: meeting._id })
+            .populate("user_details", "full_name email")
+            .lean();
+
+        // If this is a parent recurring meeting, get instances
+        let instances: any[] = [];
+        if (meeting.is_recurring) {
+            instances = await ScheduledMeetingModel.find({ parent_meeting_id: meeting._id })
+                .sort({ scheduled_start_time: 1 })
+                .lean();
+        }
+
+        return res.status(200).json({
+            message: "Meeting fetched successfully",
+            data: {
+                meeting,
+                participants,
+                instances,
+            },
+        });
+    } catch (error) {
+        console.error("Get Meeting Error:", error);
+        return res.status(500).json({ message: "Internal server error", error });
+    }
+};
 
 /**
  * Update a meeting

@@ -9,7 +9,8 @@ import {
     addParticipants, 
     removeParticipant,
     respondToMeeting,
-    getUpcomingMeetings
+    getUpcomingMeetings,
+    getMeetingByCode
 } from "../../controller/meeting/meeting.controller";
 import { userAuth } from "../../middlewares/auth/userAuth";
 
@@ -20,6 +21,7 @@ meetingRouter.post("/create", userAuth, createMeeting);
 meetingRouter.get("/", userAuth, getMeetings);
 meetingRouter.get("/upcoming", userAuth, getUpcomingMeetings);
 meetingRouter.get("/:meetingId", userAuth, getMeetingById);
+meetingRouter.get("/code/:meetingCode", userAuth, getMeetingByCode);
 meetingRouter.patch("/:meetingId", userAuth, updateMeeting);
 meetingRouter.patch("/:meetingId/status", userAuth, updateMeetingStatus);
 meetingRouter.delete("/:meetingId", userAuth, deleteMeeting);
