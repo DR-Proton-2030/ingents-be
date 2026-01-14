@@ -16,6 +16,7 @@ import taskRouter from "./api/v1/routes/tasks/tasks.routes";
 import ipTrackerMiddleware from "./api/v1/middlewares/ipTracker/ipTracker.middleware";
 import httpLoggerMiddleware from "./api/v1/middlewares/ipTracker/httpLogger.middleware";
 import waitListRouter from "./api/v1/routes/waitlist/waitList.routes";
+import meetingRouter from "./api/v1/routes/meeting/meeting.routes";
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use("/api/v1/youtube", youtubeRouter);
 app.use("/api/v1/bank", bankRouter);
 app.use("/api/v1/tasks", taskRouter);
 app.use("/api/v1/waitlist", waitListRouter);
+app.use("/api/v1/meetings", meetingRouter);
 
 // Default route for health check
 app.get("/", (req, res) => {
