@@ -10,14 +10,14 @@ const router = express_1.default.Router();
 const storage = multer_1.default.memoryStorage();
 const upload = (0, multer_1.default)({ storage });
 // 🔑 AUTH
-router.get("/facebook", facebook_controller_1.facebookLogin);
-router.get("/facebook/callback", facebook_controller_1.facebookAuthCallback);
+router.get("/login", facebook_controller_1.facebookLogin);
+router.get("/callback", facebook_controller_1.facebookAuthCallback);
 // 📄 PAGES
-router.get("/facebook/get-pages", facebook_controller_1.fetchFacebookPages);
+router.get("/get-pages", facebook_controller_1.fetchFacebookPages);
 // 🔐 TOKEN
 router.patch("/facebook/get-long-live-token", facebook_controller_1.getAccessTokenLongTerm);
 // 📝 POST
-router.post("/facebook/post", upload.fields([
+router.post("/post", upload.fields([
     { name: "image", maxCount: 1 },
     { name: "video", maxCount: 1 },
 ]), facebook_controller_1.postFacebookUniversal);

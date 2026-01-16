@@ -6,7 +6,7 @@ const userAuth = (req, res, next) => {
     var _a, _b;
     const token = ((_a = req.cookies) === null || _a === void 0 ? void 0 : _a.token) || ((_b = req.header("Authorization")) === null || _b === void 0 ? void 0 : _b.replace("Bearer ", ""));
     console.log("token", token);
-    console.log('token', token);
+    console.log("token", token);
     if (!token) {
         res.status(401).json({ message: "Unauthorized" });
         return;
