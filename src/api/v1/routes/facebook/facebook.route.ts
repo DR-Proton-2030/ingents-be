@@ -10,15 +10,27 @@ import {
 
 const router = express.Router();
 
-// Use memory storage so we can forward the file buffer directly to Facebook
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-router.get("/facebook", facebookLogin);
+// 🔑 AUTH
+router.get("/login", facebookLogin);
 router.get("/callback", facebookAuthCallback);
-router.get("/get-pages", fetchFacebookPages);
-router.patch("/get-long-live-token", getAccessTokenLongTerm);
 
-router.post("/post", upload.fields([{ name: "image", maxCount: 1 }, { name: "video", maxCount: 1 }]), postFacebookUniversal);
+// 📄 PAGES
+router.get("/get-pages", fetchFacebookPages);
+
+// 🔐 TOKEN
+router.patch("/facebook/get-long-live-token", getAccessTokenLongTerm);
+
+// 📝 POST
+router.post(
+  "/post",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
+  postFacebookUniversal
+);
 
 export default router;

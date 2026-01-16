@@ -14,42 +14,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getTaskService = void 0;
 const tasks_model_1 = __importDefault(require("../../models/tasks/tasks.model"));
-const assignedTask_model_1 = __importDefault(require("../../models/assignedTask/assignedTask.model"));
 const getTaskService = (filter, startIndex, endIndex) => __awaiter(void 0, void 0, void 0, function* () {
-    // Fetch all tasks matching the filter
-    const allTasks = yield tasks_model_1.default.find(filter);
-    // Build a map of tasks by _id for quick lookup
+    // 1️⃣ Fetch tasks WITH populated assigned users
+    const allTasks = yield tasks_model_1.default.find(filter)
+        .populate("assigned_users_info", "full_name email")
+        .lean();
+    // 2️⃣ Build map
     const taskMap = {};
     for (const task of allTasks) {
-        taskMap[String(task._id)] = Object.assign(Object.assign({}, task.toObject()), { subtask: [], assignees: [] });
+        taskMap[String(task._id)] = Object.assign(Object.assign({}, task), { subtask: [], assignees: task.assigned_users_info || [] });
     }
-    const assignedTasks = yield assignedTask_model_1.default.find({
-        task_object_id: { $in: allTasks.map(t => t._id) }
-    })
-        .populate("user_details", "full_name")
-        .lean();
-    // Map assignees to the expected object shape
-    for (const assigned of assignedTasks) {
-        const taskId = String(assigned.task_object_id);
-        if (taskMap[taskId] && assigned.user_details) {
-            const user = assigned.user_details;
-            taskMap[taskId].assignees.push({
-                _id: user._id,
-                full_name: user.full_name,
-                initials: user.full_name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .toUpperCase(),
-                color: "", // AvatarGroup will generate a random color if empty
-            });
-        }
-    }
-    // Build the tree: assign each task to its parent's subtask array if it has a parent
+    // 3️⃣ Build parent → subtask tree
     const rootTasks = [];
     for (const task of allTasks) {
         const taskId = String(task._id);
-        const parentId = task.parent_task_object_id ? String(task.parent_task_object_id) : null;
+        const parentId = task.parent_task_object_id
+            ? String(task.parent_task_object_id)
+            : null;
         if (parentId && taskMap[parentId]) {
             taskMap[parentId].subtask.push(taskMap[taskId]);
         }
@@ -57,8 +38,7 @@ const getTaskService = (filter, startIndex, endIndex) => __awaiter(void 0, void 
             rootTasks.push(taskMap[taskId]);
         }
     }
-    // Apply pagination to the root tasks only
-    const paginatedRootTasks = rootTasks.slice(startIndex, endIndex);
-    return paginatedRootTasks;
+    // 4️⃣ Pagination on root tasks only
+    return rootTasks.slice(startIndex, endIndex);
 });
 exports.getTaskService = getTaskService;

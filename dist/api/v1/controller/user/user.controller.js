@@ -25,6 +25,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.searchUsers = exports.getUserById = exports.getUsers = exports.createUser = exports.updateUser = void 0;
 const users_model_1 = __importDefault(require("../../../../models/users/users.model"));
+const generateToken_service_1 = __importDefault(require("../../../../services/generateToken/generateToken.service"));
+const config_1 = require("../../../../config/config");
+const callMailServer_1 = require("../../../../services/callMailServer/callMailServer");
 const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const _a = req.body, { userId } = _a, payload = __rest(_a, ["userId"]);
@@ -82,6 +85,18 @@ const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             company_object_id,
         };
         const userInstance = yield new users_model_1.default(userPayload).save();
+        const tokenPayload = {
+            _id: userInstance._id.toString(),
+            role,
+            company_object_id: company_object_id.toString()
+        };
+        const token = (0, generateToken_service_1.default)(tokenPayload);
+        const resetUrl = `${config_1.FRONTEND_URL}/setup-password?token=${token}`;
+        yield (0, callMailServer_1.callMailServer)("invite-user", {
+            email,
+            user_name: full_name || "User",
+            password_setup_url: resetUrl
+        });
         return res.status(200).json({
             message: "Client user created successfully",
             data: userInstance,

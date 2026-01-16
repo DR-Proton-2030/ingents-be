@@ -7,12 +7,18 @@ const express_1 = __importDefault(require("express"));
 const multer_1 = __importDefault(require("multer"));
 const facebook_controller_1 = require("../../controller/facebook/facebook.controller");
 const router = express_1.default.Router();
-// Use memory storage so we can forward the file buffer directly to Facebook
 const storage = multer_1.default.memoryStorage();
 const upload = (0, multer_1.default)({ storage });
-router.get("/facebook", facebook_controller_1.facebookLogin);
+// 🔑 AUTH
+router.get("/login", facebook_controller_1.facebookLogin);
 router.get("/callback", facebook_controller_1.facebookAuthCallback);
+// 📄 PAGES
 router.get("/get-pages", facebook_controller_1.fetchFacebookPages);
-router.patch("/get-long-live-token", facebook_controller_1.getAccessTokenLongTerm);
-router.post("/post", upload.fields([{ name: "image", maxCount: 1 }, { name: "video", maxCount: 1 }]), facebook_controller_1.postFacebookUniversal);
+// 🔐 TOKEN
+router.patch("/facebook/get-long-live-token", facebook_controller_1.getAccessTokenLongTerm);
+// 📝 POST
+router.post("/post", upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+]), facebook_controller_1.postFacebookUniversal);
 exports.default = router;

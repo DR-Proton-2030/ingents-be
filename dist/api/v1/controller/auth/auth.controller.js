@@ -217,12 +217,9 @@ exports.logoutUser = logoutUser;
 const setupPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { newPassword } = req.body;
-        const { company_object_id } = req.user;
-        if (!company_object_id) {
-            return res.status(400).json({ message: "Company ID is required" });
-        }
+        const { _id } = req.user;
         const hashedPassword = yield (0, hashPassword_1.hashPassword)(newPassword);
-        yield users_model_1.default.updateMany({ company_object_id }, { $set: { password: hashedPassword } });
+        yield users_model_1.default.findByIdAndUpdate(_id, { $set: { password: hashedPassword, has_joined: true } });
         return res.status(200).json({
             message: "Password setup successfully for all users in the company",
         });

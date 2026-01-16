@@ -7,5 +7,8 @@ const taskRouter = (0, express_1.Router)();
 taskRouter.post("/create-task", userAuth_1.userAuth, task_controller_1.createTask);
 taskRouter.get("/get-tasks", userAuth_1.userAuth, task_controller_1.getTasks);
 taskRouter.patch("/update-task-status/:taskId", userAuth_1.userAuth, task_controller_1.updateTaskStatus);
+taskRouter.patch("/update-task/:taskId", userAuth_1.userAuth, task_controller_1.editTask);
 taskRouter.delete("/delete-task/:taskId", userAuth_1.userAuth, task_controller_1.deleteTask);
+taskRouter.delete("/unassign/:taskId/:userId", userAuth_1.userAuth, task_controller_1.unassignTaskFromUser);
+taskRouter.post("/assign/:taskId/:userId", userAuth_1.userAuth, task_controller_1.assignTaskToUser);
 exports.default = taskRouter;
