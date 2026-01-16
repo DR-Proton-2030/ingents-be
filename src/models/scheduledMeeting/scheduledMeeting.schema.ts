@@ -119,6 +119,14 @@ const ParentMeetingVirtualReference: VirtualTypeOptions<IScheduledMeeting> = {
 };
 scheduledMeetingSchema.virtual("parent_meeting", ParentMeetingVirtualReference);
 
+// Virtual reference to participants
+const ParticipantsVirtualReference: VirtualTypeOptions = {
+    ref: "meeting_participants",
+    localField: "_id",
+    foreignField: "meeting_object_id",
+};
+scheduledMeetingSchema.virtual("participants", ParticipantsVirtualReference);
+
 // Indexes for better query performance
 scheduledMeetingSchema.index({ host_user_object_id: 1, scheduled_start_time: 1 });
 scheduledMeetingSchema.index({ company_object_id: 1, scheduled_start_time: 1 });

@@ -232,7 +232,7 @@ export const getMeetings = async (req: Request, res: Response) => {
 
         const [meetings, total] = await Promise.all([
             ScheduledMeetingModel.find(meetingFilter)
-                .populate("host_details", "full_name email")
+                .populate("host_details", "full_name email profile_picture")
                 .sort({ scheduled_start_time: 1 })
                 .skip(skip)
                 .limit(Number(limit))
@@ -245,7 +245,7 @@ export const getMeetings = async (req: Request, res: Response) => {
         const allParticipants = await MeetingParticipantModel.find({ 
             meeting_object_id: { $in: meetingIds } 
         })
-            .populate("user_details", "full_name email")
+            .populate("user_details", "full_name email profile_picture")
             .lean();
 
         // Group participants by meeting
@@ -290,7 +290,7 @@ export const getMeetingById = async (req: Request, res: Response) => {
             _id: meetingId,
             company_object_id,
         })
-            .populate("host_details", "full_name email")
+            .populate("host_details", "full_name email profile_picture")
             .populate("parent_meeting")
             .lean();
 
@@ -299,7 +299,7 @@ export const getMeetingById = async (req: Request, res: Response) => {
         }
 
         const participants = await MeetingParticipantModel.find({ meeting_object_id: meetingId })
-            .populate("user_details", "full_name email")
+            .populate("user_details", "full_name email profile_picture")
             .lean();
 
         // If this is a parent recurring meeting, get instances
@@ -613,7 +613,7 @@ export const respondToMeeting = async (req: Request, res: Response) => {
 export const getUpcomingMeetings = async (req: Request, res: Response) => {
     try {
         const { _id: user_object_id, company_object_id } = req.user;
-        const { limit = 5 } = req.query;
+        const { limit = 1 } = req.query;
 
         const now = new Date();
 
@@ -634,14 +634,35 @@ export const getUpcomingMeetings = async (req: Request, res: Response) => {
                 { _id: { $in: participantMeetingIds } }
             ]
         })
-            .populate("host_details", "full_name email")
+            .populate("host_details", "full_name email profile_picture")
             .sort({ scheduled_start_time: 1 })
             .limit(Number(limit))
             .lean();
 
+        // Get participants for each meeting
+        const meetingIds = (meetings as any).map((m: any) => m._id);
+        const allParticipants = await MeetingParticipantModel.find({
+            meeting_object_id: { $in: meetingIds }
+        })
+            .populate("user_details", "full_name email profile_picture")
+            .lean();
+
+        // Group participants by meeting
+        const participantsByMeeting = allParticipants.reduce((acc: any, p: any) => {
+            const key = p.meeting_object_id.toString();
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(p);
+            return acc;
+        }, {});
+
+        const meetingsWithParticipants = (meetings as any).map((m: any) => ({
+            ...m,
+            participants: participantsByMeeting[m._id.toString()] || [],
+        }));
+
         return res.status(200).json({
             message: "Upcoming meetings fetched",
-            data: meetings,
+            data: meetingsWithParticipants,
         });
     } catch (error) {
         console.error("Get Upcoming Meetings Error:", error);

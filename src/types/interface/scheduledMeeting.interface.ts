@@ -39,4 +39,5 @@ export interface IScheduledMeeting {
 
     notes?: string;
     attachments?: string[];
+    participants?: any[]; // Populated field
 }
