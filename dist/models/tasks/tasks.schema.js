@@ -28,12 +28,14 @@ exports.taskSchema = new mongoose_1.Schema({
     created_by_user_object_id: model_constant_1.default.requiredObjectId,
     company_object_id: model_constant_1.default.requiredObjectId,
     assigned_user_list: {
-        type: [
-            {
-                type: mongoose_1.Schema.Types.ObjectId,
-                ref: "User",
-            },
-        ],
-        default: [], // ✅ default must be HERE
+        type: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "User" }],
+        default: [],
     },
 }, Object.assign(Object.assign({}, schemaOption_1.GENERAL_SCHEMA_OPTIONS), { toJSON: { virtuals: true }, toObject: { virtuals: true } }));
+const UserVirtualReference = {
+    ref: "users",
+    localField: "assigned_user_list",
+    foreignField: "_id",
+    justOne: false,
+};
+exports.taskSchema.virtual("assigned_users_info", UserVirtualReference);

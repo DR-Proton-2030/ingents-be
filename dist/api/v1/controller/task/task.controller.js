@@ -12,19 +12,97 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.unassignTaskFromUser = exports.deleteTask = exports.updateTaskStatus = exports.getTasks = exports.createTask = void 0;
+exports.editTask = exports.unassignTaskFromUser = exports.deleteTask = exports.assignTaskToUser = exports.updateTaskStatus = exports.getTasks = exports.createTask = void 0;
+const users_model_1 = __importDefault(require("../../../../models/users/users.model"));
 const tasks_model_1 = __importDefault(require("../../../../models/tasks/tasks.model"));
 const getTask_1 = require("../../../../services/tasks/getTask");
 const assignedTask_model_1 = __importDefault(require("../../../../models/assignedTask/assignedTask.model"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const taskStatus_1 = require("../../../../constants/taskStatus/taskStatus");
+const callMailServer_1 = require("../../../../services/callMailServer/callMailServer");
+// export const createTask = async (req: Request, res: Response) => {
+//   const session = await mongoose.startSession();
+//   session.startTransaction();
+//   try {
+//     const {
+//       title,
+//       completed = false,
+//       description = "",
+//       parent_task_object_id = null,
+//       due_date = null,
+//       priority = "Normal",
+//       status = "pending",
+//       assigned_user_list,
+//     } = req.body;
+//     const { _id: user_object_id, company_object_id } = req.user;
+//     // Parse assigned_user_list safely
+//     let parsedAssignedUsers: string[] = [];
+//     if (Array.isArray(assigned_user_list)) {
+//       parsedAssignedUsers = assigned_user_list;
+//     } else if (typeof assigned_user_list === "string") {
+//       try {
+//         const parsed = JSON.parse(assigned_user_list);
+//         parsedAssignedUsers = Array.isArray(parsed) ? parsed : [parsed];
+//       } catch {
+//         parsedAssignedUsers = [assigned_user_list];
+//       }
+//     }
+//     // Create Task
+//     const newTaskPayload: Task = {
+//       title,
+//       completed,
+//       description,
+//       parent_task_object_id,
+//       due_date,
+//       priority,
+//       progress: 0,
+//       status,
+//       created_by_user_object_id: user_object_id,
+//       company_object_id: company_object_id!,
+//       assigned_user_list: parsedAssignedUsers,
+//     };
+//     const newTask = await new TaskModel(newTaskPayload).save({ session });
+//     // Create Assigned Task entries
+//     if (parsedAssignedUsers.length > 0) {
+//       const assignedTasks: IAssignedTask[] = parsedAssignedUsers.map((uid) => ({
+//         task_object_id: newTask._id,
+//         assigned_to_user_object_id: uid,
+//         assigned_by_user_object_id: user_object_id,
+//         company_object_id: company_object_id!,
+//         assigned_at: new Date(),
+//       }));
+//       await AssignedTaskModel.insertMany(assignedTasks, { session });
+//     }
+//     await session.commitTransaction();
+//     // Populate assigned users using virtual (full_name only)
+//     const assignedTasks = await AssignedTaskModel.find({ task_object_id: newTask._id })
+//       .populate("user_details", "full_name") // use virtual
+//       .lean();
+//     const responseTask = {
+//       ...newTask.toObject(),
+//       assignedTasks,
+//     };
+//     res.status(201).json({
+//       message: "Task created successfully",
+//       data: responseTask,
+//     });
+//   } catch (error) {
+//     if (session.inTransaction()) await session.abortTransaction();
+//     console.error("Create Task Error:", error);
+//     res.status(500).json({ message: "Internal server error" });
+//   } finally {
+//     session.endSession();
+//   }
+// };
 const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const session = yield mongoose_1.default.startSession();
     session.startTransaction();
     try {
         const { title, completed = false, description = "", parent_task_object_id = null, due_date = null, priority = "Normal", status = "pending", assigned_user_list, } = req.body;
         const { _id: user_object_id, company_object_id } = req.user;
-        // Parse assigned_user_list safely
+        if (!title) {
+            return res.status(400).json({ message: "Task title is required" });
+        }
         let parsedAssignedUsers = [];
         if (Array.isArray(assigned_user_list)) {
             parsedAssignedUsers = assigned_user_list;
@@ -38,7 +116,6 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 parsedAssignedUsers = [assigned_user_list];
             }
         }
-        // Create Task
         const newTaskPayload = {
             title,
             completed,
@@ -53,33 +130,61 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             assigned_user_list: parsedAssignedUsers,
         };
         const newTask = yield new tasks_model_1.default(newTaskPayload).save({ session });
-        // Create Assigned Task entries
+        // Create AssignedTask entries
         if (parsedAssignedUsers.length > 0) {
-            const assignedTasks = parsedAssignedUsers.map((uid) => ({
+            const assignedTasksPayload = parsedAssignedUsers.map((uid) => ({
                 task_object_id: newTask._id,
                 assigned_to_user_object_id: uid,
                 assigned_by_user_object_id: user_object_id,
                 company_object_id: company_object_id,
                 assigned_at: new Date(),
             }));
-            yield assignedTask_model_1.default.insertMany(assignedTasks, { session });
+            yield assignedTask_model_1.default.insertMany(assignedTasksPayload, { session });
         }
         yield session.commitTransaction();
-        // Populate assigned users using virtual (full_name only)
-        const assignedTasks = yield assignedTask_model_1.default.find({ task_object_id: newTask._id })
-            .populate("user_details", "full_name") // use virtual
+        // 🔹 Fetch assigned users (email + name)
+        const assignedTasks = yield assignedTask_model_1.default.find({
+            task_object_id: newTask._id,
+        })
+            .populate("user_details", "full_name email")
             .lean();
-        const responseTask = Object.assign(Object.assign({}, newTask.toObject()), { assignedTasks });
+        const assigningUser = yield users_model_1.default.findById(user_object_id)
+            .select("full_name")
+            .lean();
+        const assignedByName = typeof (assigningUser === null || assigningUser === void 0 ? void 0 : assigningUser.full_name) === "string"
+            ? assigningUser.full_name
+            : "Admin";
+        // Send Task Assignment Emails
+        if (assignedTasks.length > 0) {
+            yield Promise.all(assignedTasks.map((assigned) => __awaiter(void 0, void 0, void 0, function* () {
+                const user = assigned.user_details;
+                if (!(user === null || user === void 0 ? void 0 : user.email))
+                    return;
+                try {
+                    yield (0, callMailServer_1.callMailServer)("task-assignment", {
+                        email: user.email,
+                        user_name: user.full_name,
+                        taskTitle: newTask.title,
+                        assignedBy: assignedByName || "Admin",
+                    });
+                }
+                catch (mailError) {
+                    console.error(`❌ Failed to send task mail to ${user.email}`, mailError);
+                }
+            })));
+        }
         res.status(201).json({
             message: "Task created successfully",
-            data: responseTask,
+            data: Object.assign(Object.assign({}, newTask.toObject()), { assignedTasks }),
         });
     }
     catch (error) {
         if (session.inTransaction())
             yield session.abortTransaction();
-        console.error("Create Task Error:", error);
-        res.status(500).json({ message: "Internal server error" });
+        console.error("❌ Create Task Error:", error);
+        res.status(500).json({
+            message: "Internal server error",
+        });
     }
     finally {
         session.endSession();
@@ -127,6 +232,51 @@ const updateTaskStatus = (req, res) => __awaiter(void 0, void 0, void 0, functio
     }
 });
 exports.updateTaskStatus = updateTaskStatus;
+const assignTaskToUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { taskId, userId } = req.params;
+        const { _id: user_object_id } = req.user;
+        // Check if user exists
+        const user = yield users_model_1.default.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        //  Assign user to task
+        const task = yield tasks_model_1.default.findByIdAndUpdate(taskId, { $addToSet: { assigned_user_list: userId } }, // prevent duplicates
+        { new: true }).populate("assigned_users_info", "full_name email");
+        if (!task) {
+            return res.status(404).json({ message: "Task not found" });
+        }
+        const assigningUser = yield users_model_1.default.findById(user_object_id)
+            .select("full_name")
+            .lean();
+        const assignedByName = typeof (assigningUser === null || assigningUser === void 0 ? void 0 : assigningUser.full_name) === "string"
+            ? assigningUser.full_name
+            : "Admin";
+        try {
+            yield (0, callMailServer_1.callMailServer)("task-assignment", {
+                email: user.email,
+                user_name: user.full_name,
+                taskTitle: task.title,
+                assignedBy: assignedByName || "Admin",
+            });
+            console.log(`✅ Email sent to ${user.email}`);
+        }
+        catch (mailError) {
+            console.error("Error sending email:", mailError);
+        }
+        return res.status(200).json({
+            message: "User assigned successfully",
+            taskId,
+            assignees: task.assigned_users_info,
+        });
+    }
+    catch (error) {
+        console.error("Assign user error:", error);
+        return res.status(500).json({ message: "Server error" });
+    }
+});
+exports.assignTaskToUser = assignTaskToUser;
 const deleteTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { taskId } = req.params;
@@ -149,13 +299,18 @@ const unassignTaskFromUser = (req, res) => __awaiter(void 0, void 0, void 0, fun
     session.startTransaction();
     try {
         const { taskId, userId } = req.params;
-        const { company_object_id } = req.user;
+        const { _id: user_object_id, company_object_id } = req.user;
         if (!taskId || !userId) {
             return res.status(400).json({
                 message: "taskId and userId are required",
             });
         }
-        // 1️⃣ Ensure task exists & belongs to company
+        // Check if user exists
+        const user = yield users_model_1.default.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        // Ensure task exists & belongs to company
         const task = yield tasks_model_1.default.findOne({
             _id: taskId,
             company_object_id,
@@ -165,7 +320,7 @@ const unassignTaskFromUser = (req, res) => __awaiter(void 0, void 0, void 0, fun
                 message: "Task not found",
             });
         }
-        // 2️⃣ Remove user from task.assigned_user_list
+        // Remove user from task.assigned_user_list
         yield tasks_model_1.default.updateOne({ _id: taskId }, { $pull: { assigned_user_list: userId } }, { session });
         // 3️⃣ Delete assigned task record
         yield assignedTask_model_1.default.deleteOne({
@@ -174,6 +329,24 @@ const unassignTaskFromUser = (req, res) => __awaiter(void 0, void 0, void 0, fun
             company_object_id,
         }, { session });
         yield session.commitTransaction();
+        const assigningUser = yield users_model_1.default.findById(user_object_id)
+            .select("full_name")
+            .lean();
+        const assignedByName = typeof (assigningUser === null || assigningUser === void 0 ? void 0 : assigningUser.full_name) === "string"
+            ? assigningUser.full_name
+            : "Admin";
+        try {
+            yield (0, callMailServer_1.callMailServer)("task-unassignment", {
+                email: user.email,
+                user_name: user.full_name,
+                taskTitle: task.title,
+                assignedBy: assignedByName || "Admin",
+            });
+            console.log(`✅ Email sent to ${user.email}`);
+        }
+        catch (mailError) {
+            console.error("Error sending email:", mailError);
+        }
         return res.status(200).json({
             message: "User unassigned from task successfully",
         });
@@ -192,3 +365,22 @@ const unassignTaskFromUser = (req, res) => __awaiter(void 0, void 0, void 0, fun
     }
 });
 exports.unassignTaskFromUser = unassignTaskFromUser;
+const editTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { taskId } = req.params;
+        const updateData = req.body;
+        const updatedTask = yield tasks_model_1.default.findByIdAndUpdate(taskId, updateData, { new: true });
+        if (!updatedTask) {
+            return res.status(404).json({ message: "Task not found" });
+        }
+        res.status(200).json({
+            message: "Task updated successfully",
+            data: updatedTask,
+        });
+    }
+    catch (error) {
+        console.error("Edit Task Error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+exports.editTask = editTask;

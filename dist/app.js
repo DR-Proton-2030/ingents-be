@@ -52,7 +52,7 @@ app.use("/api/v1/messages", messages_routes_1.default);
 app.use("/api/v1/purchased-email-templates", purchasedEmailTemplate_routes_1.default);
 app.use("/api/v1/sent-emails", sentEmail_routes_1.default);
 app.use("/api/v1/email-templates", emailTemplate_routes_1.default);
-app.use("/api/v1/facebook", facebook_route_1.default);
+app.use("/api/v1/fa", facebook_route_1.default);
 app.use("/api/v1/ig", instagram_route_1.default);
 app.use("/api/v1/youtube", youtube_route_1.default);
 app.use("/api/v1/bank", bank_routes_1.default);
