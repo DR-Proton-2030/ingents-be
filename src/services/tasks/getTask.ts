@@ -8,7 +8,7 @@ export const getTaskService = async (
 ) => {
   // 1️⃣ Fetch tasks WITH populated assigned users
   const allTasks = await TaskModel.find(filter)
-    .populate("assigned_users_info", "full_name email")
+    .populate("assigned_users_info", "full_name email profile_picture")
     .lean();
 
   // 2️⃣ Build map
