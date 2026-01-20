@@ -2,8 +2,8 @@ import mongoose, { Schema, VirtualTypeOptions } from "mongoose";
 import { GENERAL_SCHEMA_OPTIONS } from "../../constants/model/schemaOption";
 import SCHEMA_DEFINITION_PROPERTY from "../../constants/model/model.constant";
 import { Task } from "../../types/interface/task.interface";
-import { TASK_STATUSES } from "../../constants/taskStatus/taskStatus";
 import { IUser } from "../../types/interface/user.interface";
+import { ITaskPhase } from "../../types/interface/taskPhase.interface";
 
 export const taskSchema: Schema<Task> = new Schema<Task>(
   {
@@ -16,12 +16,9 @@ export const taskSchema: Schema<Task> = new Schema<Task>(
     progress: SCHEMA_DEFINITION_PROPERTY.requiredNumber,
     subtaskCount: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
     commentCount: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
-    status: {
-      type: String,
-      enum: Object.values(TASK_STATUSES),
-      default: TASK_STATUSES.PENDING,
-    },
-    completed_by_user_object_id: SCHEMA_DEFINITION_PROPERTY.optionalNullObjectId,
+    phase_object_id: SCHEMA_DEFINITION_PROPERTY.requiredObjectId,
+    completed_by_user_object_id:
+      SCHEMA_DEFINITION_PROPERTY.optionalNullObjectId,
     completed_at: SCHEMA_DEFINITION_PROPERTY.optionalNullDate,
     created_by_user_object_id: SCHEMA_DEFINITION_PROPERTY.requiredObjectId,
     company_object_id: SCHEMA_DEFINITION_PROPERTY.requiredObjectId,
@@ -34,15 +31,23 @@ export const taskSchema: Schema<Task> = new Schema<Task>(
     ...GENERAL_SCHEMA_OPTIONS,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
- const UserVirtualReference: VirtualTypeOptions<IUser> = {
-      ref: "users",
-      localField: "assigned_user_list",
-      foreignField: "_id",
-      justOne: false,
-    };
+const UserVirtualReference: VirtualTypeOptions<IUser> = {
+  ref: "users",
+  localField: "assigned_user_list",
+  foreignField: "_id",
+  justOne: false,
+};
 
-    taskSchema.virtual("assigned_users_info", UserVirtualReference);
+taskSchema.virtual("assigned_users_info", UserVirtualReference);
 
+const TaskPhaseVirtualReference: VirtualTypeOptions<ITaskPhase> = {
+  ref: "TaskPhase",
+  localField: "phase_object_id",
+  foreignField: "_id",
+  justOne: true,
+};
+
+taskSchema.virtual("phase_info", TaskPhaseVirtualReference);

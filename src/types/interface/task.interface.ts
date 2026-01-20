@@ -1,15 +1,7 @@
 import { SchemaDefinitionProperty, Types } from "mongoose";
-import { TASK_STATUSES } from "../../constants/taskStatus/taskStatus";
+import { ITaskPhase } from "./taskPhase.interface";
 
 export type TaskPriority = "urgent" | "normal" | "low";
-export type TaskStatus =
-  typeof TASK_STATUSES[keyof typeof TASK_STATUSES];
-
-// export type TaskStatus =
-//   | "in-progress"
-//   | "ready-to-check"
-//   | "completed"
-//   | "backlog";
 
 export interface Task {
   title: string;
@@ -21,7 +13,7 @@ export interface Task {
   progress: number;
   subtaskCount?: number;
   commentCount?: number;
-  status: TaskStatus;
+  phase_object_id: SchemaDefinitionProperty<Types.ObjectId>;
   completed_at?: Date;
   created_by_user_object_id: SchemaDefinitionProperty<Types.ObjectId>;
   completed_by_user_object_id?: SchemaDefinitionProperty<Types.ObjectId>;
@@ -31,5 +23,4 @@ export interface Task {
     full_name: string;
     email?: string;
   }[];
-  
 }

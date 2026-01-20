@@ -4,11 +4,12 @@ import { Task } from "../../types/interface/task.interface";
 export const getTaskService = async (
   filter: Partial<Task>,
   startIndex: number,
-  endIndex: number
+  endIndex: number,
 ) => {
-  // 1️⃣ Fetch tasks WITH populated assigned users
+  // 1️⃣ Fetch tasks WITH populated assigned users and phase info
   const allTasks = await TaskModel.find(filter)
     .populate("assigned_users_info", "full_name email profile_picture")
+    .populate("phase_info")
     .lean();
 
   // 2️⃣ Build map

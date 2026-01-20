@@ -9,8 +9,8 @@ import {
 } from "../../../../types/interface/assignedTask.interface";
 import AssignedTaskModel from "../../../../models/assignedTask/assignedTask.model";
 import mongoose, { Types } from "mongoose";
-import { TASK_STATUSES } from "../../../../constants/taskStatus/taskStatus";
 import { callMailServer } from "../../../../services/callMailServer/callMailServer";
+import TaskPhase from "../../../../models/taskPhase/taskPhase.model";
 
 // export const createTask = async (req: Request, res: Response) => {
 //   const session = await mongoose.startSession();
@@ -110,14 +110,34 @@ export const createTask = async (req: Request, res: Response) => {
       parent_task_object_id = null,
       due_date = null,
       priority = "Normal",
-      status = "pending",
+      phase_object_id,
       assigned_user_list,
     } = req.body;
+
+    console.log("Phase Object Id : ", phase_object_id);
 
     const { _id: user_object_id, company_object_id } = req.user;
 
     if (!title) {
       return res.status(400).json({ message: "Task title is required" });
+    }
+
+    // Get phase_object_id: use provided one or default to "Not Started" phase
+    let taskPhaseId = phase_object_id;
+    if (!taskPhaseId) {
+      const defaultPhase = await TaskPhase.findOne({
+        company_object_id,
+        name: "Not Started",
+      }).session(session);
+
+      if (!defaultPhase) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          message:
+            "No default task phase found. Please create task phases first.",
+        });
+      }
+      taskPhaseId = defaultPhase._id;
     }
 
     let parsedAssignedUsers: string[] = [];
@@ -141,7 +161,7 @@ export const createTask = async (req: Request, res: Response) => {
       due_date,
       priority,
       progress: 0,
-      status,
+      phase_object_id: taskPhaseId,
       created_by_user_object_id: user_object_id,
       company_object_id: company_object_id!,
       assigned_user_list: parsedAssignedUsers,
@@ -158,7 +178,7 @@ export const createTask = async (req: Request, res: Response) => {
           assigned_by_user_object_id: user_object_id,
           company_object_id: company_object_id!,
           assigned_at: new Date(),
-        })
+        }),
       );
 
       await AssignedTaskModel.insertMany(assignedTasksPayload, { session });
@@ -200,10 +220,10 @@ export const createTask = async (req: Request, res: Response) => {
           } catch (mailError) {
             console.error(
               `❌ Failed to send task mail to ${user.email}`,
-              mailError
+              mailError,
             );
           }
-        })
+        }),
       );
     }
 
@@ -232,13 +252,15 @@ export const getTasks = async (req: Request, res: Response) => {
     const { page, limit } = req.query;
 
     const startIndex = ((Number(page) || 1) - 1) * (Number(limit) || 10);
-    const endIndex = startIndex + (Number(limit) || 10);
+    const endIndex = startIndex + (Number(limit) || 30);
 
     const tasks = await getTaskService(
       { company_object_id: company_object_id! },
       startIndex,
-      endIndex
+      endIndex,
     );
+
+    // console.log("Task : ", tasks);
 
     res
       .status(200)
@@ -251,31 +273,43 @@ export const getTasks = async (req: Request, res: Response) => {
 export const updateTaskStatus = async (req: Request, res: Response) => {
   try {
     const { taskId } = req.params;
-    const { status } = req.body;
+    const { phase_object_id } = req.body;
+    const { company_object_id } = req.user;
 
-    if (!Object.values(TASK_STATUSES).includes(status)) {
+    if (!phase_object_id) {
       return res.status(400).json({
-        message: "Invalid task status",
-        allowedStatuses: Object.values(TASK_STATUSES),
+        message: "phase_object_id is required",
+      });
+    }
+
+    // Verify the phase exists and belongs to the company
+    const phase = await TaskPhase.findOne({
+      _id: phase_object_id,
+      company_object_id,
+    });
+
+    if (!phase) {
+      return res.status(400).json({
+        message: "Invalid task phase or phase does not belong to your company",
       });
     }
 
     const task = await TaskModel.findByIdAndUpdate(
       taskId,
-      { status },
-      { new: true }
-    );
+      { phase_object_id },
+      { new: true },
+    ).populate("phase_info");
 
     if (!task) {
       return res.status(404).json({ message: "Task not found" });
     }
 
     return res.status(200).json({
-      message: "Task status updated",
+      message: "Task phase updated",
       task,
     });
   } catch (error) {
-    console.error("Update task status error:", error);
+    console.error("Update task phase error:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -295,7 +329,7 @@ export const assignTaskToUser = async (req: Request, res: Response) => {
     const task = await TaskModel.findByIdAndUpdate(
       taskId,
       { $addToSet: { assigned_user_list: userId } }, // prevent duplicates
-      { new: true }
+      { new: true },
     ).populate("assigned_users_info", "full_name email");
 
     if (!task) {
@@ -356,9 +390,7 @@ export const unassignTaskFromUser = async (req: Request, res: Response) => {
 
   try {
     const { taskId, userId } = req.params;
-    const { _id:user_object_id, company_object_id } = req.user;
-
-  
+    const { _id: user_object_id, company_object_id } = req.user;
 
     if (!taskId || !userId) {
       return res.status(400).json({
@@ -366,7 +398,7 @@ export const unassignTaskFromUser = async (req: Request, res: Response) => {
       });
     }
 
-       // Check if user exists
+    // Check if user exists
     const user = await UserModel.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -388,7 +420,7 @@ export const unassignTaskFromUser = async (req: Request, res: Response) => {
     await TaskModel.updateOne(
       { _id: taskId },
       { $pull: { assigned_user_list: userId } },
-      { session }
+      { session },
     );
 
     // 3️⃣ Delete assigned task record
@@ -398,15 +430,15 @@ export const unassignTaskFromUser = async (req: Request, res: Response) => {
         assigned_to_user_object_id: userId,
         company_object_id,
       },
-      { session }
+      { session },
     );
 
     await session.commitTransaction();
 
-  const assigningUser = await UserModel.findById(user_object_id)
+    const assigningUser = await UserModel.findById(user_object_id)
       .select("full_name")
       .lean();
-    
+
     const assignedByName =
       typeof assigningUser?.full_name === "string"
         ? assigningUser.full_name
@@ -444,11 +476,9 @@ export const editTask = async (req: Request, res: Response) => {
   try {
     const { taskId } = req.params;
     const updateData = req.body;
-    const updatedTask = await TaskModel.findByIdAndUpdate(
-      taskId,
-      updateData,
-      { new: true }
-    );
+    const updatedTask = await TaskModel.findByIdAndUpdate(taskId, updateData, {
+      new: true,
+    });
     if (!updatedTask) {
       return res.status(404).json({ message: "Task not found" });
     }
@@ -459,5 +489,5 @@ export const editTask = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Edit Task Error:", error);
     res.status(500).json({ message: "Internal server error" });
-  } 
+  }
 };

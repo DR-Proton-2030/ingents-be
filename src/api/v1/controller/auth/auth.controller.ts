@@ -11,6 +11,7 @@ import { comparePassword } from "../../../../services/passwordControl/comparePas
 import { NODE_ENV } from "../../../../config/config";
 import { callMailServer } from "../../../../services/callMailServer/callMailServer";
 import { CompanyEmbeddingsService } from "../../../../services/companyEmbeddings/companyEmbeddings.service";
+import { createDefaultTaskPhases } from "../../../../services/taskPhase/createDefaultTaskPhases";
 
 export const signUp = async (req: Request, res: Response) => {
   console.log("=========> Req Body:", req.body);
@@ -38,7 +39,7 @@ export const signUp = async (req: Request, res: Response) => {
       session.endSession();
       return res.status(409).json({ message: "User already exists" });
     }
-    
+
     console.log("===>Logo", company_logo);
     const companyPayload: ICompany = {
       ...company_details,
@@ -55,23 +56,29 @@ export const signUp = async (req: Request, res: Response) => {
     };
     const userInstance = await new UserModel(userPayload).save({ session });
 
+    // Create default task phases for the company
+    await createDefaultTaskPhases({
+      company_object_id: new mongoose.Types.ObjectId(companyInstance._id),
+      session,
+    });
+
     // Generate company embeddings for RAG functionality
     try {
-      console.log('Generating company embeddings...');
+      console.log("Generating company embeddings...");
       await CompanyEmbeddingsService.createCompanyEmbeddings(
         {
           company: companyInstance.toObject(),
           additionalContext: [
             `Primary contact: ${user_details.full_name} (${user_details.email})`,
-            `User role: ${user_details.role || 'Administrator'}`,
-            `Registration date: ${new Date().toISOString()}`
-          ]
+            `User role: ${user_details.role || "Administrator"}`,
+            `Registration date: ${new Date().toISOString()}`,
+          ],
         },
-        session
+        session,
       );
-      console.log('Company embeddings generated successfully');
+      console.log("Company embeddings generated successfully");
     } catch (embeddingError) {
-      console.error('Error generating company embeddings:', embeddingError);
+      console.error("Error generating company embeddings:", embeddingError);
       // Don't fail the signup if embeddings fail, but log the error
       // You might want to implement a retry mechanism or background job here
     }
@@ -118,14 +125,13 @@ export const signUp = async (req: Request, res: Response) => {
   }
 };
 
-
 export const signIn = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
     // 1️⃣ Find user
     const user: any = await UserModel.findOne({ email }).populate(
-      "company_details"
+      "company_details",
     );
 
     if (!user) {
@@ -194,7 +200,7 @@ export const signIn = async (req: Request, res: Response) => {
 
 export const verifyToken = async (req: Request, res: Response) => {
   try {
-    const { _id, company_object_id } = req.user ;
+    const { _id, company_object_id } = req.user;
     console.log("user", _id, company_object_id);
     const user = await UserModel.findById(_id).populate("company_details");
     if (!user) {
@@ -253,15 +259,14 @@ export const logoutUser = async (req: Request, res: Response) => {
 
 export const setupPassword = async (req: Request, res: Response) => {
   try {
-    const { newPassword } = req.body;  
+    const { newPassword } = req.body;
     const { _id } = req.user;
 
     const hashedPassword = await hashPassword(newPassword);
 
-    await UserModel.findByIdAndUpdate(
-      _id,
-      { $set: { password: hashedPassword, has_joined: true } }
-    );
+    await UserModel.findByIdAndUpdate(_id, {
+      $set: { password: hashedPassword, has_joined: true },
+    });
     return res.status(200).json({
       message: "Password setup successfully for all users in the company",
     });

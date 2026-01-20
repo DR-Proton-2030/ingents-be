@@ -13,6 +13,7 @@ import instagramRouter from "./api/v1/routes/instagram/instagram.route";
 import youtubeRouter from "./api/v1/routes/youtube/youtube.route";
 import bankRouter from "./api/v1/routes/bank/bank.routes";
 import taskRouter from "./api/v1/routes/tasks/tasks.routes";
+import taskPhaseRouter from "./api/v1/routes/taskPhase/taskPhase.routes";
 import ipTrackerMiddleware from "./api/v1/middlewares/ipTracker/ipTracker.middleware";
 import httpLoggerMiddleware from "./api/v1/middlewares/ipTracker/httpLogger.middleware";
 import waitListRouter from "./api/v1/routes/waitlist/waitList.routes";
@@ -41,7 +42,7 @@ app.use(
       "token",
     ],
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-  })
+  }),
 );
 
 // Manually handle OPTIONS (Preflight Requests)
@@ -61,6 +62,7 @@ app.use("/api/v1/ig", instagramRouter);
 app.use("/api/v1/youtube", youtubeRouter);
 app.use("/api/v1/bank", bankRouter);
 app.use("/api/v1/tasks", taskRouter);
+app.use("/api/v1/task-phase", taskPhaseRouter);
 app.use("/api/v1/waitlist", waitListRouter);
 app.use("/api/v1/meetings", meetingRouter);
 
