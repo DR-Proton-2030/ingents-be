@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const taskPhase_controller_1 = require("../../controller/taskPhase/taskPhase.controller");
+const userAuth_1 = require("../../middlewares/auth/userAuth");
+const taskPhaseRouter = (0, express_1.Router)();
+taskPhaseRouter.post("/create", userAuth_1.userAuth, taskPhase_controller_1.createTaskPhase);
+taskPhaseRouter.get("/list", userAuth_1.userAuth, taskPhase_controller_1.getTaskPhases);
+// taskPhaseRouter.get("/:id", userAuth, getTaskPhaseById);
+// taskPhaseRouter.put("/update/:id", userAuth, updateTaskPhase);
+// taskPhaseRouter.delete("/delete/:id", userAuth, deleteTaskPhase);
+// taskPhaseRouter.put("/reorder", userAuth, reorderTaskPhases);
+exports.default = taskPhaseRouter;

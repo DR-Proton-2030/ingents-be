@@ -7,7 +7,6 @@ exports.taskSchema = void 0;
 const mongoose_1 = require("mongoose");
 const schemaOption_1 = require("../../constants/model/schemaOption");
 const model_constant_1 = __importDefault(require("../../constants/model/model.constant"));
-const taskStatus_1 = require("../../constants/taskStatus/taskStatus");
 exports.taskSchema = new mongoose_1.Schema({
     title: model_constant_1.default.requiredString,
     completed: model_constant_1.default.requiredBoolean,
@@ -18,11 +17,7 @@ exports.taskSchema = new mongoose_1.Schema({
     progress: model_constant_1.default.requiredNumber,
     subtaskCount: model_constant_1.default.optionalNullNumber,
     commentCount: model_constant_1.default.optionalNullNumber,
-    status: {
-        type: String,
-        enum: Object.values(taskStatus_1.TASK_STATUSES),
-        default: taskStatus_1.TASK_STATUSES.PENDING,
-    },
+    phase_object_id: model_constant_1.default.requiredObjectId,
     completed_by_user_object_id: model_constant_1.default.optionalNullObjectId,
     completed_at: model_constant_1.default.optionalNullDate,
     created_by_user_object_id: model_constant_1.default.requiredObjectId,
@@ -39,3 +34,10 @@ const UserVirtualReference = {
     justOne: false,
 };
 exports.taskSchema.virtual("assigned_users_info", UserVirtualReference);
+const TaskPhaseVirtualReference = {
+    ref: "TaskPhase",
+    localField: "phase_object_id",
+    foreignField: "_id",
+    justOne: true,
+};
+exports.taskSchema.virtual("phase_info", TaskPhaseVirtualReference);

@@ -97,6 +97,13 @@ const ParentMeetingVirtualReference = {
     justOne: true,
 };
 exports.scheduledMeetingSchema.virtual("parent_meeting", ParentMeetingVirtualReference);
+// Virtual reference to participants
+const ParticipantsVirtualReference = {
+    ref: "meeting_participants",
+    localField: "_id",
+    foreignField: "meeting_object_id",
+};
+exports.scheduledMeetingSchema.virtual("participants", ParticipantsVirtualReference);
 // Indexes for better query performance
 exports.scheduledMeetingSchema.index({ host_user_object_id: 1, scheduled_start_time: 1 });
 exports.scheduledMeetingSchema.index({ company_object_id: 1, scheduled_start_time: 1 });

@@ -18,8 +18,8 @@ const tasks_model_1 = __importDefault(require("../../../../models/tasks/tasks.mo
 const getTask_1 = require("../../../../services/tasks/getTask");
 const assignedTask_model_1 = __importDefault(require("../../../../models/assignedTask/assignedTask.model"));
 const mongoose_1 = __importDefault(require("mongoose"));
-const taskStatus_1 = require("../../../../constants/taskStatus/taskStatus");
 const callMailServer_1 = require("../../../../services/callMailServer/callMailServer");
+const taskPhase_model_1 = __importDefault(require("../../../../models/taskPhase/taskPhase.model"));
 // export const createTask = async (req: Request, res: Response) => {
 //   const session = await mongoose.startSession();
 //   session.startTransaction();
@@ -98,10 +98,26 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     const session = yield mongoose_1.default.startSession();
     session.startTransaction();
     try {
-        const { title, completed = false, description = "", parent_task_object_id = null, due_date = null, priority = "Normal", status = "pending", assigned_user_list, } = req.body;
+        const { title, completed = false, description = "", parent_task_object_id = null, due_date = null, priority = "Normal", phase_object_id, assigned_user_list, } = req.body;
+        console.log("Phase Object Id : ", phase_object_id);
         const { _id: user_object_id, company_object_id } = req.user;
         if (!title) {
             return res.status(400).json({ message: "Task title is required" });
+        }
+        // Get phase_object_id: use provided one or default to "Not Started" phase
+        let taskPhaseId = phase_object_id;
+        if (!taskPhaseId) {
+            const defaultPhase = yield taskPhase_model_1.default.findOne({
+                company_object_id,
+                name: "Not Started",
+            }).session(session);
+            if (!defaultPhase) {
+                yield session.abortTransaction();
+                return res.status(400).json({
+                    message: "No default task phase found. Please create task phases first.",
+                });
+            }
+            taskPhaseId = defaultPhase._id;
         }
         let parsedAssignedUsers = [];
         if (Array.isArray(assigned_user_list)) {
@@ -124,7 +140,7 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             due_date,
             priority,
             progress: 0,
-            status,
+            phase_object_id: taskPhaseId,
             created_by_user_object_id: user_object_id,
             company_object_id: company_object_id,
             assigned_user_list: parsedAssignedUsers,
@@ -196,8 +212,9 @@ const getTasks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const { company_object_id } = req.user;
         const { page, limit } = req.query;
         const startIndex = ((Number(page) || 1) - 1) * (Number(limit) || 10);
-        const endIndex = startIndex + (Number(limit) || 10);
+        const endIndex = startIndex + (Number(limit) || 30);
         const tasks = yield (0, getTask_1.getTaskService)({ company_object_id: company_object_id }, startIndex, endIndex);
+        // console.log("Task : ", tasks);
         res
             .status(200)
             .json({ message: "Tasks fetched successfully", data: tasks });
@@ -210,24 +227,34 @@ exports.getTasks = getTasks;
 const updateTaskStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { taskId } = req.params;
-        const { status } = req.body;
-        if (!Object.values(taskStatus_1.TASK_STATUSES).includes(status)) {
+        const { phase_object_id } = req.body;
+        const { company_object_id } = req.user;
+        if (!phase_object_id) {
             return res.status(400).json({
-                message: "Invalid task status",
-                allowedStatuses: Object.values(taskStatus_1.TASK_STATUSES),
+                message: "phase_object_id is required",
             });
         }
-        const task = yield tasks_model_1.default.findByIdAndUpdate(taskId, { status }, { new: true });
+        // Verify the phase exists and belongs to the company
+        const phase = yield taskPhase_model_1.default.findOne({
+            _id: phase_object_id,
+            company_object_id,
+        });
+        if (!phase) {
+            return res.status(400).json({
+                message: "Invalid task phase or phase does not belong to your company",
+            });
+        }
+        const task = yield tasks_model_1.default.findByIdAndUpdate(taskId, { phase_object_id }, { new: true }).populate("phase_info");
         if (!task) {
             return res.status(404).json({ message: "Task not found" });
         }
         return res.status(200).json({
-            message: "Task status updated",
+            message: "Task phase updated",
             task,
         });
     }
     catch (error) {
-        console.error("Update task status error:", error);
+        console.error("Update task phase error:", error);
         return res.status(500).json({ message: "Server error" });
     }
 });
@@ -369,7 +396,9 @@ const editTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { taskId } = req.params;
         const updateData = req.body;
-        const updatedTask = yield tasks_model_1.default.findByIdAndUpdate(taskId, updateData, { new: true });
+        const updatedTask = yield tasks_model_1.default.findByIdAndUpdate(taskId, updateData, {
+            new: true,
+        });
         if (!updatedTask) {
             return res.status(404).json({ message: "Task not found" });
         }

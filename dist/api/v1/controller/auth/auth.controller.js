@@ -21,6 +21,7 @@ const hashPassword_1 = require("../../../../services/passwordControl/hashPasswor
 const comparePassword_1 = require("../../../../services/passwordControl/comparePassword");
 const config_1 = require("../../../../config/config");
 const companyEmbeddings_service_1 = require("../../../../services/companyEmbeddings/companyEmbeddings.service");
+const createDefaultTaskPhases_1 = require("../../../../services/taskPhase/createDefaultTaskPhases");
 const signUp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     console.log("=========> Req Body:", req.body);
     const session = yield mongoose_1.default.startSession();
@@ -48,21 +49,26 @@ const signUp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         });
         const userPayload = Object.assign(Object.assign({}, user_details), { password: yield (0, hashPassword_1.hashPassword)(user_details.password), company_object_id: companyInstance._id, profile_picture: user_avatar || null });
         const userInstance = yield new users_model_1.default(userPayload).save({ session });
+        // Create default task phases for the company
+        yield (0, createDefaultTaskPhases_1.createDefaultTaskPhases)({
+            company_object_id: new mongoose_1.default.Types.ObjectId(companyInstance._id),
+            session,
+        });
         // Generate company embeddings for RAG functionality
         try {
-            console.log('Generating company embeddings...');
+            console.log("Generating company embeddings...");
             yield companyEmbeddings_service_1.CompanyEmbeddingsService.createCompanyEmbeddings({
                 company: companyInstance.toObject(),
                 additionalContext: [
                     `Primary contact: ${user_details.full_name} (${user_details.email})`,
-                    `User role: ${user_details.role || 'Administrator'}`,
-                    `Registration date: ${new Date().toISOString()}`
-                ]
+                    `User role: ${user_details.role || "Administrator"}`,
+                    `Registration date: ${new Date().toISOString()}`,
+                ],
             }, session);
-            console.log('Company embeddings generated successfully');
+            console.log("Company embeddings generated successfully");
         }
         catch (embeddingError) {
-            console.error('Error generating company embeddings:', embeddingError);
+            console.error("Error generating company embeddings:", embeddingError);
             // Don't fail the signup if embeddings fail, but log the error
             // You might want to implement a retry mechanism or background job here
         }
@@ -219,7 +225,9 @@ const setupPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         const { newPassword } = req.body;
         const { _id } = req.user;
         const hashedPassword = yield (0, hashPassword_1.hashPassword)(newPassword);
-        yield users_model_1.default.findByIdAndUpdate(_id, { $set: { password: hashedPassword, has_joined: true } });
+        yield users_model_1.default.findByIdAndUpdate(_id, {
+            $set: { password: hashedPassword, has_joined: true },
+        });
         return res.status(200).json({
             message: "Password setup successfully for all users in the company",
         });

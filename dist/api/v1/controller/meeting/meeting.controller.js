@@ -204,7 +204,7 @@ const getMeetings = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         ];
         const [meetings, total] = yield Promise.all([
             scheduledMeeting_model_1.default.find(meetingFilter)
-                .populate("host_details", "full_name email")
+                .populate("host_details", "full_name email profile_picture")
                 .sort({ scheduled_start_time: 1 })
                 .skip(skip)
                 .limit(Number(limit))
@@ -216,7 +216,7 @@ const getMeetings = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         const allParticipants = yield meetingParticipant_model_1.default.find({
             meeting_object_id: { $in: meetingIds }
         })
-            .populate("user_details", "full_name email")
+            .populate("user_details", "full_name email profile_picture")
             .lean();
         // Group participants by meeting
         const participantsByMeeting = allParticipants.reduce((acc, p) => {
@@ -256,14 +256,14 @@ const getMeetingById = (req, res) => __awaiter(void 0, void 0, void 0, function*
             _id: meetingId,
             company_object_id,
         })
-            .populate("host_details", "full_name email")
+            .populate("host_details", "full_name email profile_picture")
             .populate("parent_meeting")
             .lean();
         if (!meeting) {
             return res.status(404).json({ message: "Meeting not found" });
         }
         const participants = yield meetingParticipant_model_1.default.find({ meeting_object_id: meetingId })
-            .populate("user_details", "full_name email")
+            .populate("user_details", "full_name email profile_picture")
             .lean();
         // If this is a parent recurring meeting, get instances
         let instances = [];
@@ -539,7 +539,7 @@ exports.respondToMeeting = respondToMeeting;
 const getUpcomingMeetings = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { _id: user_object_id, company_object_id } = req.user;
-        const { limit = 5 } = req.query;
+        const { limit = 1 } = req.query;
         const now = new Date();
         // Get meetings where user is a participant
         const participantMeetings = yield meetingParticipant_model_1.default.find({
@@ -556,13 +556,29 @@ const getUpcomingMeetings = (req, res) => __awaiter(void 0, void 0, void 0, func
                 { _id: { $in: participantMeetingIds } }
             ]
         })
-            .populate("host_details", "full_name email")
+            .populate("host_details", "full_name email profile_picture")
             .sort({ scheduled_start_time: 1 })
             .limit(Number(limit))
             .lean();
+        // Get participants for each meeting
+        const meetingIds = meetings.map((m) => m._id);
+        const allParticipants = yield meetingParticipant_model_1.default.find({
+            meeting_object_id: { $in: meetingIds }
+        })
+            .populate("user_details", "full_name email profile_picture")
+            .lean();
+        // Group participants by meeting
+        const participantsByMeeting = allParticipants.reduce((acc, p) => {
+            const key = p.meeting_object_id.toString();
+            if (!acc[key])
+                acc[key] = [];
+            acc[key].push(p);
+            return acc;
+        }, {});
+        const meetingsWithParticipants = meetings.map((m) => (Object.assign(Object.assign({}, m), { participants: participantsByMeeting[m._id.toString()] || [] })));
         return res.status(200).json({
             message: "Upcoming meetings fetched",
-            data: meetings,
+            data: meetingsWithParticipants,
         });
     }
     catch (error) {

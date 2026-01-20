@@ -18,6 +18,7 @@ const instagram_route_1 = __importDefault(require("./api/v1/routes/instagram/ins
 const youtube_route_1 = __importDefault(require("./api/v1/routes/youtube/youtube.route"));
 const bank_routes_1 = __importDefault(require("./api/v1/routes/bank/bank.routes"));
 const tasks_routes_1 = __importDefault(require("./api/v1/routes/tasks/tasks.routes"));
+const taskPhase_routes_1 = __importDefault(require("./api/v1/routes/taskPhase/taskPhase.routes"));
 const ipTracker_middleware_1 = __importDefault(require("./api/v1/middlewares/ipTracker/ipTracker.middleware"));
 const httpLogger_middleware_1 = __importDefault(require("./api/v1/middlewares/ipTracker/httpLogger.middleware"));
 const waitList_routes_1 = __importDefault(require("./api/v1/routes/waitlist/waitList.routes"));
@@ -58,6 +59,7 @@ app.use("/api/v1/ig", instagram_route_1.default);
 app.use("/api/v1/youtube", youtube_route_1.default);
 app.use("/api/v1/bank", bank_routes_1.default);
 app.use("/api/v1/tasks", tasks_routes_1.default);
+app.use("/api/v1/task-phase", taskPhase_routes_1.default);
 app.use("/api/v1/waitlist", waitList_routes_1.default);
 app.use("/api/v1/meetings", meeting_routes_1.default);
 // Default route for health check
