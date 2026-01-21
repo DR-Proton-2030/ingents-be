@@ -154,65 +154,65 @@ export const getTaskPhases = async (req: Request, res: Response) => {
 //  * Update a task phase
 //  * @route PUT /api/v1/task-phase/:id
 //  */
-// export const updateTaskPhase = async (req: Request, res: Response) => {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
+export const updateTaskPhase = async (req: Request, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-//   try {
-//     const { id } = req.params;
-//     const { name, order, color } = req.body;
-//     const { company_object_id } = req.user;
+  try {
+    const { id } = req.params;
+    const { name, index, color } = req.body;
+    const { company_object_id } = req.user;
 
-//     const phase = await TaskPhase.findOne({
-//       _id: id,
-//       company_object_id,
-//     }).session(session);
+    const phase = await TaskPhase.findOne({
+      _id: id,
+      company_object_id,
+    }).session(session);
 
-//     if (!phase) {
-//       await session.abortTransaction();
-//       return res.status(404).json({ message: "Task phase not found" });
-//     }
+    if (!phase) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: "Task phase not found" });
+    }
 
-//     // Check if trying to rename to an existing phase name
-//     if (name && name !== phase.name) {
-//       const existingPhase = await TaskPhase.findOne({
-//         company_object_id,
-//         name: { $regex: new RegExp(`^${name}$`, "i") },
-//         _id: { $ne: id },
-//       }).session(session);
+    // Check if trying to rename to an existing phase name
+    if (name && name !== phase.name) {
+      const existingPhase = await TaskPhase.findOne({
+        company_object_id,
+        name: { $regex: new RegExp(`^${name}$`, "i") },
+        _id: { $ne: id },
+      }).session(session);
 
-//       if (existingPhase) {
-//         await session.abortTransaction();
-//         return res.status(400).json({
-//           message: "A phase with this name already exists",
-//         });
-//       }
-//     }
+      if (existingPhase) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          message: "A phase with this name already exists",
+        });
+      }
+    }
 
-//     // Update fields
-//     if (name) phase.name = name;
-//     if (order !== undefined) phase.order = order;
-//     if (color) phase.color = color;
+    // Update fields
+    if (name) phase.name = name;
+    if (index !== undefined) phase.index = index;
+    if (color) phase.color = color;
 
-//     await phase.save({ session });
+    await phase.save({ session });
 
-//     await session.commitTransaction();
+    await session.commitTransaction();
 
-//     res.status(200).json({
-//       message: "Task phase updated successfully",
-//       data: phase,
-//     });
-//   } catch (error) {
-//     if (session.inTransaction()) await session.abortTransaction();
-//     console.error("Error updating task phase:", error);
-//     res.status(500).json({
-//       message: "Failed to update task phase",
-//       error,
-//     });
-//   } finally {
-//     session.endSession();
-//   }
-// };
+    res.status(200).json({
+      message: "Task phase updated successfully",
+      data: phase,
+    });
+  } catch (error) {
+    if (session.inTransaction()) await session.abortTransaction();
+    console.error("Error updating task phase:", error);
+    res.status(500).json({
+      message: "Failed to update task phase",
+      error,
+    });
+  } finally {
+    session.endSession();
+  }
+};
 
 // /**
 //  * Delete a task phase

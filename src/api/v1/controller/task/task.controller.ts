@@ -296,8 +296,13 @@ export const getTasks = async (req: Request, res: Response) => {
     const sortOptions: any = {};
     if (sort_by) {
       const sortField = sort_by as string;
-      const sortDirection = sort_order === "desc" ? -1 : 1;
-      sortOptions[sortField] = sortDirection;
+      // Handle if user passes 'asc' or 'desc' directly in sort_by
+      if (sortField === "asc" || sortField === "desc") {
+        sortOptions.createdAt = sortField === "desc" ? -1 : 1;
+      } else {
+        const sortDirection = sort_order === "desc" ? -1 : 1;
+        sortOptions[sortField] = sortDirection;
+      }
     } else {
       sortOptions.createdAt = -1; // Default: newest first
     }

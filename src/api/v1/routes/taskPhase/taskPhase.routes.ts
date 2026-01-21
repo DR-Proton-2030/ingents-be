@@ -3,7 +3,7 @@ import {
   createTaskPhase,
   getTaskPhases,
   // getTaskPhaseById,
-  // updateTaskPhase,
+  updateTaskPhase,
   // deleteTaskPhase,
   // reorderTaskPhases,
 } from "../../controller/taskPhase/taskPhase.controller";
@@ -14,7 +14,7 @@ const taskPhaseRouter = Router();
 taskPhaseRouter.post("/create", userAuth, createTaskPhase);
 taskPhaseRouter.get("/list", userAuth, getTaskPhases);
 // taskPhaseRouter.get("/:id", userAuth, getTaskPhaseById);
-// taskPhaseRouter.put("/update/:id", userAuth, updateTaskPhase);
+taskPhaseRouter.patch("/update/:id", userAuth, updateTaskPhase);
 // taskPhaseRouter.delete("/delete/:id", userAuth, deleteTaskPhase);
 // taskPhaseRouter.put("/reorder", userAuth, reorderTaskPhases);
 
