@@ -115,7 +115,7 @@ export const getUsers = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Company ID not found in user" });
     }
 
-    const users = await UserModel.find({ company_object_id });
+    const users = await UserModel.find({ company_object_id,has_joined: true });
 
     return res.status(200).json({
       message: "Users fetched successfully",
