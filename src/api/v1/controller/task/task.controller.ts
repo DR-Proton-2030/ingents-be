@@ -248,23 +248,82 @@ export const createTask = async (req: Request, res: Response) => {
 
 export const getTasks = async (req: Request, res: Response) => {
   try {
-    const { company_object_id } = req.user;
-    const { page, limit } = req.query;
+    const { company_object_id, _id: user_object_id } = req.user;
+    const {
+      page,
+      limit,
+      assigned_user_id,
+      phase_object_id,
+      due_date_from,
+      due_date_to,
+      my_tasks,
+      sort_by,
+      sort_order,
+    } = req.query;
 
     const startIndex = ((Number(page) || 1) - 1) * (Number(limit) || 10);
     const endIndex = startIndex + (Number(limit) || 30);
 
+    // Build dynamic filter
+    const filter: any = { company_object_id: company_object_id! };
+
+    // Filter by "My Tasks" - tasks assigned to the logged-in user (takes priority)
+    if (my_tasks === "true") {
+      filter.assigned_user_list = user_object_id;
+    }
+    // Filter by assigned user (only if my_tasks is not set)
+    else if (assigned_user_id) {
+      filter.assigned_user_list = assigned_user_id;
+    }
+
+    // Filter by task phase (status) - only filter tasks that have phase_object_id
+    if (phase_object_id) {
+      filter.phase_object_id = phase_object_id;
+    }
+
+    // Filter by due date range
+    if (due_date_from || due_date_to) {
+      filter.due_date = {};
+      if (due_date_from) {
+        filter.due_date.$gte = new Date(due_date_from as string);
+      }
+      if (due_date_to) {
+        filter.due_date.$lte = new Date(due_date_to as string);
+      }
+    }
+
+    // Build sort options
+    const sortOptions: any = {};
+    if (sort_by) {
+      const sortField = sort_by as string;
+      const sortDirection = sort_order === "desc" ? -1 : 1;
+      sortOptions[sortField] = sortDirection;
+    } else {
+      sortOptions.createdAt = -1; // Default: newest first
+    }
+
+    console.log("Get task all filters : ", filter);
+
     const tasks = await getTaskService(
-      { company_object_id: company_object_id! },
+      filter,
       startIndex,
       endIndex,
+      sortOptions,
     );
 
-    // console.log("Task : ", tasks);
-
-    res
-      .status(200)
-      .json({ message: "Tasks fetched successfully", data: tasks });
+    res.status(200).json({
+      message: "Tasks fetched successfully",
+      data: tasks,
+      filters_applied: {
+        assigned_user_id: assigned_user_id || null,
+        phase_object_id: phase_object_id || null,
+        due_date_range:
+          due_date_from || due_date_to
+            ? { from: due_date_from, to: due_date_to }
+            : null,
+        my_tasks: my_tasks === "true",
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Internal server error", error });
   }
