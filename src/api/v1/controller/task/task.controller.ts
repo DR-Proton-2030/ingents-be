@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import UserModel from "../../../../models/users/users.model";
-import { Task, TaskAttachment } from "../../../../types/interface/task.interface";
+import {
+  Task,
+  TaskAttachment,
+} from "../../../../types/interface/task.interface";
 import TaskModel from "../../../../models/tasks/tasks.model";
 import { getTaskService } from "../../../../services/tasks/getTask";
 import {
@@ -11,7 +14,6 @@ import AssignedTaskModel from "../../../../models/assignedTask/assignedTask.mode
 import mongoose, { Types } from "mongoose";
 import { callMailServer } from "../../../../services/callMailServer/callMailServer";
 import TaskPhase from "../../../../models/taskPhase/taskPhase.model";
-
 
 export const createTask = async (req: Request, res: Response) => {
   const session = await mongoose.startSession();
@@ -75,7 +77,7 @@ export const createTask = async (req: Request, res: Response) => {
     // Format 2: Array of {url, description} objects
     // Format 3: JSON string of attachment objects
     let parsedAttachments: TaskAttachment[] = [];
-    
+
     // Parse attachment_descriptions if it's a JSON string
     let descriptions: string[] = [];
     if (Array.isArray(attachment_descriptions)) {
@@ -112,12 +114,18 @@ export const createTask = async (req: Request, res: Response) => {
             return { url: String(att), description: descriptions[index] || "" };
           });
         } else if (typeof parsed === "object" && parsed.url) {
-          parsedAttachments = [{ url: parsed.url, description: parsed.description || "" }];
+          parsedAttachments = [
+            { url: parsed.url, description: parsed.description || "" },
+          ];
         } else {
-          parsedAttachments = [{ url: attachments, description: descriptions[0] || "" }];
+          parsedAttachments = [
+            { url: attachments, description: descriptions[0] || "" },
+          ];
         }
       } catch {
-        parsedAttachments = [{ url: attachments, description: descriptions[0] || "" }];
+        parsedAttachments = [
+          { url: attachments, description: descriptions[0] || "" },
+        ];
       }
     }
 
@@ -230,8 +238,11 @@ export const getTasks = async (req: Request, res: Response) => {
       sort_order,
     } = req.query;
 
-    const startIndex = ((Number(page) || 1) - 1) * (Number(limit) || 10);
-    const endIndex = startIndex + (Number(limit) || 30);
+    const currentPage = Number(page) || 1;
+    const pageLimit = Number(limit) || 30;
+
+    const startIndex = (currentPage - 1) * pageLimit;
+    const endIndex = startIndex + pageLimit;
 
     // Build dynamic filter
     const filter: any = { company_object_id: company_object_id! };
@@ -278,6 +289,9 @@ export const getTasks = async (req: Request, res: Response) => {
 
     console.log("Get task all filters : ", filter);
 
+    // Get total count for pagination
+    const totalTasks = await TaskModel.countDocuments(filter);
+
     const tasks = await getTaskService(
       filter,
       startIndex,
@@ -288,6 +302,11 @@ export const getTasks = async (req: Request, res: Response) => {
     res.status(200).json({
       message: "Tasks fetched successfully",
       data: tasks,
+      pagination: {
+        currentPage: currentPage,
+        totalCount: totalTasks,
+        totalPages: Math.ceil(totalTasks / pageLimit),
+      },
       filters_applied: {
         assigned_user_id: assigned_user_id || null,
         phase_object_id: phase_object_id || null,
