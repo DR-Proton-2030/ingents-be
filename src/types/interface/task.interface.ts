@@ -3,6 +3,11 @@ import { ITaskPhase } from "./taskPhase.interface";
 
 export type TaskPriority = "urgent" | "normal" | "low";
 
+export interface TaskAttachment {
+  url: string;
+  description?: string;
+}
+
 export interface Task {
   title: string;
   completed: boolean;
@@ -23,4 +28,5 @@ export interface Task {
     full_name: string;
     email?: string;
   }[];
+  attachments?: TaskAttachment[];
 }

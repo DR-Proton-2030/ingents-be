@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import UserModel from "../../../../models/users/users.model";
-import { Task } from "../../../../types/interface/task.interface";
+import { Task, TaskAttachment } from "../../../../types/interface/task.interface";
 import TaskModel from "../../../../models/tasks/tasks.model";
 import { getTaskService } from "../../../../services/tasks/getTask";
 import {
@@ -12,91 +12,6 @@ import mongoose, { Types } from "mongoose";
 import { callMailServer } from "../../../../services/callMailServer/callMailServer";
 import TaskPhase from "../../../../models/taskPhase/taskPhase.model";
 
-// export const createTask = async (req: Request, res: Response) => {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
-
-//   try {
-//     const {
-//       title,
-//       completed = false,
-//       description = "",
-//       parent_task_object_id = null,
-//       due_date = null,
-//       priority = "Normal",
-//       status = "pending",
-//       assigned_user_list,
-//     } = req.body;
-
-//     const { _id: user_object_id, company_object_id } = req.user;
-
-//     // Parse assigned_user_list safely
-//     let parsedAssignedUsers: string[] = [];
-//     if (Array.isArray(assigned_user_list)) {
-//       parsedAssignedUsers = assigned_user_list;
-//     } else if (typeof assigned_user_list === "string") {
-//       try {
-//         const parsed = JSON.parse(assigned_user_list);
-//         parsedAssignedUsers = Array.isArray(parsed) ? parsed : [parsed];
-//       } catch {
-//         parsedAssignedUsers = [assigned_user_list];
-//       }
-//     }
-
-//     // Create Task
-//     const newTaskPayload: Task = {
-//       title,
-//       completed,
-//       description,
-//       parent_task_object_id,
-//       due_date,
-//       priority,
-//       progress: 0,
-//       status,
-//       created_by_user_object_id: user_object_id,
-//       company_object_id: company_object_id!,
-//       assigned_user_list: parsedAssignedUsers,
-//     };
-
-//     const newTask = await new TaskModel(newTaskPayload).save({ session });
-
-//     // Create Assigned Task entries
-//     if (parsedAssignedUsers.length > 0) {
-//       const assignedTasks: IAssignedTask[] = parsedAssignedUsers.map((uid) => ({
-//         task_object_id: newTask._id,
-//         assigned_to_user_object_id: uid,
-//         assigned_by_user_object_id: user_object_id,
-//         company_object_id: company_object_id!,
-//         assigned_at: new Date(),
-//       }));
-
-//       await AssignedTaskModel.insertMany(assignedTasks, { session });
-//     }
-
-//     await session.commitTransaction();
-
-//     // Populate assigned users using virtual (full_name only)
-//     const assignedTasks = await AssignedTaskModel.find({ task_object_id: newTask._id })
-//       .populate("user_details", "full_name") // use virtual
-//       .lean();
-
-//     const responseTask = {
-//       ...newTask.toObject(),
-//       assignedTasks,
-//     };
-
-//     res.status(201).json({
-//       message: "Task created successfully",
-//       data: responseTask,
-//     });
-//   } catch (error) {
-//     if (session.inTransaction()) await session.abortTransaction();
-//     console.error("Create Task Error:", error);
-//     res.status(500).json({ message: "Internal server error" });
-//   } finally {
-//     session.endSession();
-//   }
-// };
 
 export const createTask = async (req: Request, res: Response) => {
   const session = await mongoose.startSession();
@@ -112,6 +27,8 @@ export const createTask = async (req: Request, res: Response) => {
       priority = "Normal",
       phase_object_id,
       assigned_user_list,
+      attachments = [], // Can be URLs from fileUploadHelper or array of {url, description}
+      attachment_descriptions = [], // Optional descriptions for each attachment
     } = req.body;
 
     console.log("Phase Object Id : ", phase_object_id);
@@ -153,6 +70,57 @@ export const createTask = async (req: Request, res: Response) => {
       }
     }
 
+    // Parse attachments (handle multiple formats)
+    // Format 1: Array of URLs from fileUploadHelper (strings)
+    // Format 2: Array of {url, description} objects
+    // Format 3: JSON string of attachment objects
+    let parsedAttachments: TaskAttachment[] = [];
+    
+    // Parse attachment_descriptions if it's a JSON string
+    let descriptions: string[] = [];
+    if (Array.isArray(attachment_descriptions)) {
+      descriptions = attachment_descriptions;
+    } else if (typeof attachment_descriptions === "string") {
+      try {
+        const parsed = JSON.parse(attachment_descriptions);
+        descriptions = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        descriptions = [attachment_descriptions];
+      }
+    }
+
+    if (Array.isArray(attachments)) {
+      parsedAttachments = attachments.map((att, index) => {
+        // If it's already an object with url property
+        if (typeof att === "object" && att.url) {
+          return { url: att.url, description: att.description || "" };
+        }
+        // If it's a string URL (from fileUploadHelper)
+        if (typeof att === "string") {
+          return { url: att, description: descriptions[index] || "" };
+        }
+        return { url: String(att), description: "" };
+      });
+    } else if (typeof attachments === "string") {
+      try {
+        const parsed = JSON.parse(attachments);
+        if (Array.isArray(parsed)) {
+          parsedAttachments = parsed.map((att, index) => {
+            if (typeof att === "object" && att.url) {
+              return { url: att.url, description: att.description || "" };
+            }
+            return { url: String(att), description: descriptions[index] || "" };
+          });
+        } else if (typeof parsed === "object" && parsed.url) {
+          parsedAttachments = [{ url: parsed.url, description: parsed.description || "" }];
+        } else {
+          parsedAttachments = [{ url: attachments, description: descriptions[0] || "" }];
+        }
+      } catch {
+        parsedAttachments = [{ url: attachments, description: descriptions[0] || "" }];
+      }
+    }
+
     const newTaskPayload: Task = {
       title,
       completed,
@@ -165,6 +133,7 @@ export const createTask = async (req: Request, res: Response) => {
       created_by_user_object_id: user_object_id,
       company_object_id: company_object_id!,
       assigned_user_list: parsedAssignedUsers,
+      attachments: parsedAttachments,
     };
 
     const newTask = await new TaskModel(newTaskPayload).save({ session });

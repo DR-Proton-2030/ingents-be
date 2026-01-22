@@ -26,6 +26,15 @@ export const taskSchema: Schema<Task> = new Schema<Task>(
       type: [{ type: Schema.Types.ObjectId, ref: "User" }],
       default: [],
     },
+    attachments: {
+      type: [
+        {
+          url: { type: String, required: true },
+          description: { type: String, default: "" },
+        },
+      ],
+      default: [],
+    },
   },
   {
     ...GENERAL_SCHEMA_OPTIONS,
