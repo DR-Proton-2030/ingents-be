@@ -1,5 +1,6 @@
 import { SchemaDefinitionProperty, Types } from "mongoose";
 import { ITaskPhase } from "./taskPhase.interface";
+import { ITag } from "./tag.interface";
 
 export type TaskPriority = "urgent" | "normal" | "low";
 
@@ -29,5 +30,7 @@ export interface Task {
     email?: string;
   }[];
   attachments?: TaskAttachment[];
+  tag_object_ids?: SchemaDefinitionProperty<Types.ObjectId>[];
+  tags_info?: ITag[];
   project_object_id?: SchemaDefinitionProperty<Types.ObjectId> | null;
 }

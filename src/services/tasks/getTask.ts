@@ -7,10 +7,11 @@ export const getTaskService = async (
   endIndex: number,
   sortOptions: any = {},
 ) => {
-  // 1️⃣ Fetch tasks WITH populated assigned users and phase info
+  // 1️⃣ Fetch tasks WITH populated assigned users, phase info, and tags
   const allTasks = await TaskModel.find(filter)
     .populate("assigned_users_info", "full_name email profile_picture")
     .populate("phase_info")
+    .populate("tags_info")
     .sort(sortOptions)
     .lean();
 
