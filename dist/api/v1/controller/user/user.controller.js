@@ -114,7 +114,7 @@ const getUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         if (!company_object_id) {
             return res.status(400).json({ message: "Company ID not found in user" });
         }
-        const users = yield users_model_1.default.find({ company_object_id });
+        const users = yield users_model_1.default.find({ company_object_id, has_joined: true });
         return res.status(200).json({
             message: "Users fetched successfully",
             data: users,

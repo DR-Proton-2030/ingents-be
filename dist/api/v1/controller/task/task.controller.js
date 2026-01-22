@@ -209,15 +209,64 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 exports.createTask = createTask;
 const getTasks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { company_object_id } = req.user;
-        const { page, limit } = req.query;
+        const { company_object_id, _id: user_object_id } = req.user;
+        const { page, limit, assigned_user_id, phase_object_id, due_date_from, due_date_to, my_tasks, sort_by, sort_order, } = req.query;
         const startIndex = ((Number(page) || 1) - 1) * (Number(limit) || 10);
         const endIndex = startIndex + (Number(limit) || 30);
-        const tasks = yield (0, getTask_1.getTaskService)({ company_object_id: company_object_id }, startIndex, endIndex);
-        // console.log("Task : ", tasks);
-        res
-            .status(200)
-            .json({ message: "Tasks fetched successfully", data: tasks });
+        // Build dynamic filter
+        const filter = { company_object_id: company_object_id };
+        // Filter by "My Tasks" - tasks assigned to the logged-in user (takes priority)
+        if (my_tasks === "true") {
+            filter.assigned_user_list = user_object_id;
+        }
+        // Filter by assigned user (only if my_tasks is not set)
+        else if (assigned_user_id) {
+            filter.assigned_user_list = assigned_user_id;
+        }
+        // Filter by task phase (status) - only filter tasks that have phase_object_id
+        if (phase_object_id) {
+            filter.phase_object_id = phase_object_id;
+        }
+        // Filter by due date range
+        if (due_date_from || due_date_to) {
+            filter.due_date = {};
+            if (due_date_from) {
+                filter.due_date.$gte = new Date(due_date_from);
+            }
+            if (due_date_to) {
+                filter.due_date.$lte = new Date(due_date_to);
+            }
+        }
+        // Build sort options
+        const sortOptions = {};
+        if (sort_by) {
+            const sortField = sort_by;
+            // Handle if user passes 'asc' or 'desc' directly in sort_by
+            if (sortField === "asc" || sortField === "desc") {
+                sortOptions.createdAt = sortField === "desc" ? -1 : 1;
+            }
+            else {
+                const sortDirection = sort_order === "desc" ? -1 : 1;
+                sortOptions[sortField] = sortDirection;
+            }
+        }
+        else {
+            sortOptions.createdAt = -1; // Default: newest first
+        }
+        console.log("Get task all filters : ", filter);
+        const tasks = yield (0, getTask_1.getTaskService)(filter, startIndex, endIndex, sortOptions);
+        res.status(200).json({
+            message: "Tasks fetched successfully",
+            data: tasks,
+            filters_applied: {
+                assigned_user_id: assigned_user_id || null,
+                phase_object_id: phase_object_id || null,
+                due_date_range: due_date_from || due_date_to
+                    ? { from: due_date_from, to: due_date_to }
+                    : null,
+                my_tasks: my_tasks === "true",
+            },
+        });
     }
     catch (error) {
         res.status(500).json({ message: "Internal server error", error });

@@ -7,7 +7,7 @@ const taskPhaseRouter = (0, express_1.Router)();
 taskPhaseRouter.post("/create", userAuth_1.userAuth, taskPhase_controller_1.createTaskPhase);
 taskPhaseRouter.get("/list", userAuth_1.userAuth, taskPhase_controller_1.getTaskPhases);
 // taskPhaseRouter.get("/:id", userAuth, getTaskPhaseById);
-// taskPhaseRouter.put("/update/:id", userAuth, updateTaskPhase);
+taskPhaseRouter.patch("/update/:id", userAuth_1.userAuth, taskPhase_controller_1.updateTaskPhase);
 // taskPhaseRouter.delete("/delete/:id", userAuth, deleteTaskPhase);
 // taskPhaseRouter.put("/reorder", userAuth, reorderTaskPhases);
 exports.default = taskPhaseRouter;
