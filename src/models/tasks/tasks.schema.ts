@@ -4,6 +4,7 @@ import SCHEMA_DEFINITION_PROPERTY from "../../constants/model/model.constant";
 import { Task } from "../../types/interface/task.interface";
 import { IUser } from "../../types/interface/user.interface";
 import { ITaskPhase } from "../../types/interface/taskPhase.interface";
+import { ITag } from "../../types/interface/tag.interface";
 
 export const taskSchema: Schema<Task> = new Schema<Task>(
   {
@@ -35,6 +36,10 @@ export const taskSchema: Schema<Task> = new Schema<Task>(
       ],
       default: [],
     },
+    tag_object_ids: {
+      type: [{ type: Schema.Types.ObjectId, ref: "Tags" }],
+      default: [],
+    },
   },
   {
     ...GENERAL_SCHEMA_OPTIONS,
@@ -60,3 +65,12 @@ const TaskPhaseVirtualReference: VirtualTypeOptions<ITaskPhase> = {
 };
 
 taskSchema.virtual("phase_info", TaskPhaseVirtualReference);
+
+const TagVirtualReference: VirtualTypeOptions<ITag> = {
+  ref: "Tags",
+  localField: "tag_object_ids",
+  foreignField: "_id",
+  justOne: false,
+};
+
+taskSchema.virtual("tags_info", TagVirtualReference);

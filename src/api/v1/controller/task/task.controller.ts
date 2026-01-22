@@ -31,6 +31,7 @@ export const createTask = async (req: Request, res: Response) => {
       assigned_user_list,
       attachments = [], // Can be URLs from fileUploadHelper or array of {url, description}
       attachment_descriptions = [], // Optional descriptions for each attachment
+      tag_object_ids = [], // Array of tag IDs
     } = req.body;
 
     console.log("Phase Object Id : ", phase_object_id);
@@ -129,6 +130,21 @@ export const createTask = async (req: Request, res: Response) => {
       }
     }
 
+    // Parse tag_object_ids
+    let parsedTags: string[] = [];
+    if (Array.isArray(tag_object_ids)) {
+      parsedTags = tag_object_ids;
+    } else if (typeof tag_object_ids === "string") {
+      try {
+        const parsed = JSON.parse(tag_object_ids);
+        parsedTags = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        parsedTags = tag_object_ids ? [tag_object_ids] : [];
+      }
+    }
+
+    console.log(tag_object_ids);
+
     const newTaskPayload: Task = {
       title,
       completed,
@@ -142,6 +158,7 @@ export const createTask = async (req: Request, res: Response) => {
       company_object_id: company_object_id!,
       assigned_user_list: parsedAssignedUsers,
       attachments: parsedAttachments,
+      tag_object_ids: parsedTags,
     };
 
     const newTask = await new TaskModel(newTaskPayload).save({ session });
@@ -162,6 +179,13 @@ export const createTask = async (req: Request, res: Response) => {
     }
 
     await session.commitTransaction();
+
+    // Populate the task with all relations
+    const populatedTask = await TaskModel.findById(newTask._id)
+      .populate("assigned_users_info", "full_name email profile_picture")
+      .populate("phase_info")
+      .populate("tags_info")
+      .lean();
 
     // 🔹 Fetch assigned users (email + name)
     const assignedTasks = await AssignedTaskModel.find({
@@ -207,7 +231,7 @@ export const createTask = async (req: Request, res: Response) => {
     res.status(201).json({
       message: "Task created successfully",
       data: {
-        ...newTask.toObject(),
+        ...populatedTask,
         assignedTasks,
       },
     });
@@ -224,6 +248,7 @@ export const createTask = async (req: Request, res: Response) => {
 };
 
 export const getTasks = async (req: Request, res: Response) => {
+  console.log("<=======> hit");
   try {
     const { company_object_id, _id: user_object_id } = req.user;
     const {
@@ -527,9 +552,16 @@ export const unassignTaskFromUser = async (req: Request, res: Response) => {
 export const editTask = async (req: Request, res: Response) => {
   try {
     const { taskId } = req.params;
-    const { attachments, attachment_descriptions, ...restOfBody } = req.body;
+    const {
+      attachments,
+      attachment_descriptions,
+      tag_object_id_list,
+      ...restOfBody
+    } = req.body;
 
     let updateData = { ...restOfBody };
+
+    console.log(tag_object_id_list);
 
     // Parse attachments if they exist in the update request
     if (attachments !== undefined) {
@@ -565,25 +597,53 @@ export const editTask = async (req: Request, res: Response) => {
               if (typeof att === "object" && att.url) {
                 return { url: att.url, description: att.description || "" };
               }
-              return { url: String(att), description: descriptions[index] || "" };
+              return {
+                url: String(att),
+                description: descriptions[index] || "",
+              };
             });
           } else if (typeof parsed === "object" && parsed.url) {
-            parsedAttachments = [{ url: parsed.url, description: parsed.description || "" }];
+            parsedAttachments = [
+              { url: parsed.url, description: parsed.description || "" },
+            ];
           } else {
-            parsedAttachments = [{ url: attachments, description: descriptions[0] || "" }];
+            parsedAttachments = [
+              { url: attachments, description: descriptions[0] || "" },
+            ];
           }
         } catch {
-          parsedAttachments = [{ url: attachments, description: descriptions[0] || "" }];
+          parsedAttachments = [
+            { url: attachments, description: descriptions[0] || "" },
+          ];
         }
       }
-      
+
       updateData.attachments = parsedAttachments;
+    }
+
+    // Parse tag_object_ids if provided
+    if (tag_object_id_list !== undefined) {
+      let parsedTags: string[] = [];
+      if (Array.isArray(tag_object_id_list)) {
+        parsedTags = tag_object_id_list;
+      } else if (typeof tag_object_id_list === "string") {
+        try {
+          const parsed = JSON.parse(tag_object_id_list);
+          parsedTags = Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          parsedTags = tag_object_id_list ? [tag_object_id_list] : [];
+        }
+      }
+      updateData.tag_object_ids = parsedTags;
     }
 
     const updatedTask = await TaskModel.findByIdAndUpdate(taskId, updateData, {
       new: true,
-    });
-    
+    })
+      .populate("assigned_users_info", "full_name email profile_picture")
+      .populate("phase_info")
+      .populate("tags_info");
+
     if (!updatedTask) {
       return res.status(404).json({ message: "Task not found" });
     }
