@@ -508,10 +508,63 @@ export const unassignTaskFromUser = async (req: Request, res: Response) => {
 export const editTask = async (req: Request, res: Response) => {
   try {
     const { taskId } = req.params;
-    const updateData = req.body;
+    const { attachments, attachment_descriptions, ...restOfBody } = req.body;
+
+    let updateData = { ...restOfBody };
+
+    // Parse attachments if they exist in the update request
+    if (attachments !== undefined) {
+      let parsedAttachments: TaskAttachment[] = [];
+      let descriptions: string[] = [];
+
+      if (Array.isArray(attachment_descriptions)) {
+        descriptions = attachment_descriptions;
+      } else if (typeof attachment_descriptions === "string") {
+        try {
+          const parsed = JSON.parse(attachment_descriptions);
+          descriptions = Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          descriptions = [attachment_descriptions];
+        }
+      }
+
+      if (Array.isArray(attachments)) {
+        parsedAttachments = attachments.map((att, index) => {
+          if (typeof att === "object" && att.url) {
+            return { url: att.url, description: att.description || "" };
+          }
+          if (typeof att === "string") {
+            return { url: att, description: descriptions[index] || "" };
+          }
+          return { url: String(att), description: "" };
+        });
+      } else if (typeof attachments === "string") {
+        try {
+          const parsed = JSON.parse(attachments);
+          if (Array.isArray(parsed)) {
+            parsedAttachments = parsed.map((att, index) => {
+              if (typeof att === "object" && att.url) {
+                return { url: att.url, description: att.description || "" };
+              }
+              return { url: String(att), description: descriptions[index] || "" };
+            });
+          } else if (typeof parsed === "object" && parsed.url) {
+            parsedAttachments = [{ url: parsed.url, description: parsed.description || "" }];
+          } else {
+            parsedAttachments = [{ url: attachments, description: descriptions[0] || "" }];
+          }
+        } catch {
+          parsedAttachments = [{ url: attachments, description: descriptions[0] || "" }];
+        }
+      }
+      
+      updateData.attachments = parsedAttachments;
+    }
+
     const updatedTask = await TaskModel.findByIdAndUpdate(taskId, updateData, {
       new: true,
     });
+    
     if (!updatedTask) {
       return res.status(404).json({ message: "Task not found" });
     }
