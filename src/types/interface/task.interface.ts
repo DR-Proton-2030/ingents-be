@@ -29,4 +29,5 @@ export interface Task {
     email?: string;
   }[];
   attachments?: TaskAttachment[];
+  project_object_id?: SchemaDefinitionProperty<Types.ObjectId> | null;
 }

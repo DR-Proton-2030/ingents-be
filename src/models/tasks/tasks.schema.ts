@@ -35,6 +35,7 @@ export const taskSchema: Schema<Task> = new Schema<Task>(
       ],
       default: [],
     },
+    project_object_id: SCHEMA_DEFINITION_PROPERTY.optionalNullObjectId,
   },
   {
     ...GENERAL_SCHEMA_OPTIONS,

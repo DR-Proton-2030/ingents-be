@@ -1,10 +1,8 @@
-export type ProjectStatus = 'not started' | 'in progress' | 'completed' | 'on hold';
+import { SchemaDefinitionProperty, Types } from "mongoose";
 
 export interface IProject {
-    project_name: string;
-    project_description: string;
-    project_owner: string;
-    start_date: Date;
-    end_date: Date | null;
-    status: ProjectStatus;
+  name: string;
+  detail: string;
+  company_object_id: SchemaDefinitionProperty<Types.ObjectId>;
+  created_by_user_object_id: SchemaDefinitionProperty<Types.ObjectId>;
 }

@@ -31,6 +31,7 @@ export const createTask = async (req: Request, res: Response) => {
       assigned_user_list,
       attachments = [], // Can be URLs from fileUploadHelper or array of {url, description}
       attachment_descriptions = [], // Optional descriptions for each attachment
+      project_object_id = null,
     } = req.body;
 
     console.log("Phase Object Id : ", phase_object_id);
@@ -142,6 +143,7 @@ export const createTask = async (req: Request, res: Response) => {
       company_object_id: company_object_id!,
       assigned_user_list: parsedAssignedUsers,
       attachments: parsedAttachments,
+      project_object_id: project_object_id || null,
     };
 
     const newTask = await new TaskModel(newTaskPayload).save({ session });
@@ -236,6 +238,7 @@ export const getTasks = async (req: Request, res: Response) => {
       my_tasks,
       sort_by,
       sort_order,
+      project_object_id,
     } = req.query;
 
     const currentPage = Number(page) || 1;
@@ -259,6 +262,11 @@ export const getTasks = async (req: Request, res: Response) => {
     // Filter by task phase (status) - only filter tasks that have phase_object_id
     if (phase_object_id) {
       filter.phase_object_id = phase_object_id;
+    }
+
+    // Filter by project
+    if (project_object_id) {
+      filter.project_object_id = project_object_id;
     }
 
     // Filter by due date range
@@ -315,6 +323,7 @@ export const getTasks = async (req: Request, res: Response) => {
             ? { from: due_date_from, to: due_date_to }
             : null,
         my_tasks: my_tasks === "true",
+        project_object_id: project_object_id || null,
       },
     });
   } catch (error) {

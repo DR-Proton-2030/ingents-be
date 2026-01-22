@@ -18,6 +18,8 @@ import ipTrackerMiddleware from "./api/v1/middlewares/ipTracker/ipTracker.middle
 import httpLoggerMiddleware from "./api/v1/middlewares/ipTracker/httpLogger.middleware";
 import waitListRouter from "./api/v1/routes/waitlist/waitList.routes";
 import meetingRouter from "./api/v1/routes/meeting/meeting.routes";
+import projectRouter from "./api/v1/routes/project/project.routes";
+
 
 const app = express();
 
@@ -65,6 +67,8 @@ app.use("/api/v1/tasks", taskRouter);
 app.use("/api/v1/task-phase", taskPhaseRouter);
 app.use("/api/v1/waitlist", waitListRouter);
 app.use("/api/v1/meetings", meetingRouter);
+app.use("/api/v1/projects", projectRouter);
+
 
 // Default route for health check
 app.get("/", (req, res) => {
