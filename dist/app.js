@@ -19,10 +19,12 @@ const youtube_route_1 = __importDefault(require("./api/v1/routes/youtube/youtube
 const bank_routes_1 = __importDefault(require("./api/v1/routes/bank/bank.routes"));
 const tasks_routes_1 = __importDefault(require("./api/v1/routes/tasks/tasks.routes"));
 const taskPhase_routes_1 = __importDefault(require("./api/v1/routes/taskPhase/taskPhase.routes"));
+const tag_routes_1 = __importDefault(require("./api/v1/routes/tag/tag.routes"));
 const ipTracker_middleware_1 = __importDefault(require("./api/v1/middlewares/ipTracker/ipTracker.middleware"));
 const httpLogger_middleware_1 = __importDefault(require("./api/v1/middlewares/ipTracker/httpLogger.middleware"));
 const waitList_routes_1 = __importDefault(require("./api/v1/routes/waitlist/waitList.routes"));
 const meeting_routes_1 = __importDefault(require("./api/v1/routes/meeting/meeting.routes"));
+const project_routes_1 = __importDefault(require("./api/v1/routes/project/project.routes"));
 const app = (0, express_1.default)();
 app.use(ipTracker_middleware_1.default);
 app.use(httpLogger_middleware_1.default);
@@ -60,8 +62,10 @@ app.use("/api/v1/youtube", youtube_route_1.default);
 app.use("/api/v1/bank", bank_routes_1.default);
 app.use("/api/v1/tasks", tasks_routes_1.default);
 app.use("/api/v1/task-phase", taskPhase_routes_1.default);
+app.use("/api/v1/task-tags", tag_routes_1.default);
 app.use("/api/v1/waitlist", waitList_routes_1.default);
 app.use("/api/v1/meetings", meeting_routes_1.default);
+app.use("/api/v1/projects", project_routes_1.default);
 // Default route for health check
 app.get("/", (req, res) => {
     res.send(`<h1>Received Successfully</h1>`);

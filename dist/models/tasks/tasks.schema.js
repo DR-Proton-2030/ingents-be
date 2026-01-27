@@ -26,6 +26,20 @@ exports.taskSchema = new mongoose_1.Schema({
         type: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "User" }],
         default: [],
     },
+    attachments: {
+        type: [
+            {
+                url: { type: String, required: true },
+                description: { type: String, default: "" },
+            },
+        ],
+        default: [],
+    },
+    tag_object_ids: {
+        type: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "Tags" }],
+        default: [],
+    },
+    project_object_id: model_constant_1.default.optionalNullObjectId,
 }, Object.assign(Object.assign({}, schemaOption_1.GENERAL_SCHEMA_OPTIONS), { toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 const UserVirtualReference = {
     ref: "users",
@@ -41,3 +55,10 @@ const TaskPhaseVirtualReference = {
     justOne: true,
 };
 exports.taskSchema.virtual("phase_info", TaskPhaseVirtualReference);
+const TagVirtualReference = {
+    ref: "Tags",
+    localField: "tag_object_ids",
+    foreignField: "_id",
+    justOne: false,
+};
+exports.taskSchema.virtual("tags_info", TagVirtualReference);

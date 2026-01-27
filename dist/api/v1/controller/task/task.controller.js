@@ -8,6 +8,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -20,85 +31,14 @@ const assignedTask_model_1 = __importDefault(require("../../../../models/assigne
 const mongoose_1 = __importDefault(require("mongoose"));
 const callMailServer_1 = require("../../../../services/callMailServer/callMailServer");
 const taskPhase_model_1 = __importDefault(require("../../../../models/taskPhase/taskPhase.model"));
-// export const createTask = async (req: Request, res: Response) => {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
-//   try {
-//     const {
-//       title,
-//       completed = false,
-//       description = "",
-//       parent_task_object_id = null,
-//       due_date = null,
-//       priority = "Normal",
-//       status = "pending",
-//       assigned_user_list,
-//     } = req.body;
-//     const { _id: user_object_id, company_object_id } = req.user;
-//     // Parse assigned_user_list safely
-//     let parsedAssignedUsers: string[] = [];
-//     if (Array.isArray(assigned_user_list)) {
-//       parsedAssignedUsers = assigned_user_list;
-//     } else if (typeof assigned_user_list === "string") {
-//       try {
-//         const parsed = JSON.parse(assigned_user_list);
-//         parsedAssignedUsers = Array.isArray(parsed) ? parsed : [parsed];
-//       } catch {
-//         parsedAssignedUsers = [assigned_user_list];
-//       }
-//     }
-//     // Create Task
-//     const newTaskPayload: Task = {
-//       title,
-//       completed,
-//       description,
-//       parent_task_object_id,
-//       due_date,
-//       priority,
-//       progress: 0,
-//       status,
-//       created_by_user_object_id: user_object_id,
-//       company_object_id: company_object_id!,
-//       assigned_user_list: parsedAssignedUsers,
-//     };
-//     const newTask = await new TaskModel(newTaskPayload).save({ session });
-//     // Create Assigned Task entries
-//     if (parsedAssignedUsers.length > 0) {
-//       const assignedTasks: IAssignedTask[] = parsedAssignedUsers.map((uid) => ({
-//         task_object_id: newTask._id,
-//         assigned_to_user_object_id: uid,
-//         assigned_by_user_object_id: user_object_id,
-//         company_object_id: company_object_id!,
-//         assigned_at: new Date(),
-//       }));
-//       await AssignedTaskModel.insertMany(assignedTasks, { session });
-//     }
-//     await session.commitTransaction();
-//     // Populate assigned users using virtual (full_name only)
-//     const assignedTasks = await AssignedTaskModel.find({ task_object_id: newTask._id })
-//       .populate("user_details", "full_name") // use virtual
-//       .lean();
-//     const responseTask = {
-//       ...newTask.toObject(),
-//       assignedTasks,
-//     };
-//     res.status(201).json({
-//       message: "Task created successfully",
-//       data: responseTask,
-//     });
-//   } catch (error) {
-//     if (session.inTransaction()) await session.abortTransaction();
-//     console.error("Create Task Error:", error);
-//     res.status(500).json({ message: "Internal server error" });
-//   } finally {
-//     session.endSession();
-//   }
-// };
 const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const session = yield mongoose_1.default.startSession();
     session.startTransaction();
     try {
-        const { title, completed = false, description = "", parent_task_object_id = null, due_date = null, priority = "Normal", phase_object_id, assigned_user_list, } = req.body;
+        const { title, completed = false, description = "", parent_task_object_id = null, due_date = null, priority = "Normal", phase_object_id, assigned_user_list, attachments = [], // Can be URLs from fileUploadHelper or array of {url, description}
+        attachment_descriptions = [], // Optional descriptions for each attachment
+        tag_object_ids = [], // Array of tag IDs
+        project_object_id = null, } = req.body;
         console.log("Phase Object Id : ", phase_object_id);
         const { _id: user_object_id, company_object_id } = req.user;
         if (!title) {
@@ -132,6 +72,81 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 parsedAssignedUsers = [assigned_user_list];
             }
         }
+        // Parse attachments (handle multiple formats)
+        // Format 1: Array of URLs from fileUploadHelper (strings)
+        // Format 2: Array of {url, description} objects
+        // Format 3: JSON string of attachment objects
+        let parsedAttachments = [];
+        // Parse attachment_descriptions if it's a JSON string
+        let descriptions = [];
+        if (Array.isArray(attachment_descriptions)) {
+            descriptions = attachment_descriptions;
+        }
+        else if (typeof attachment_descriptions === "string") {
+            try {
+                const parsed = JSON.parse(attachment_descriptions);
+                descriptions = Array.isArray(parsed) ? parsed : [parsed];
+            }
+            catch (_b) {
+                descriptions = [attachment_descriptions];
+            }
+        }
+        if (Array.isArray(attachments)) {
+            parsedAttachments = attachments.map((att, index) => {
+                // If it's already an object with url property
+                if (typeof att === "object" && att.url) {
+                    return { url: att.url, description: att.description || "" };
+                }
+                // If it's a string URL (from fileUploadHelper)
+                if (typeof att === "string") {
+                    return { url: att, description: descriptions[index] || "" };
+                }
+                return { url: String(att), description: "" };
+            });
+        }
+        else if (typeof attachments === "string") {
+            try {
+                const parsed = JSON.parse(attachments);
+                if (Array.isArray(parsed)) {
+                    parsedAttachments = parsed.map((att, index) => {
+                        if (typeof att === "object" && att.url) {
+                            return { url: att.url, description: att.description || "" };
+                        }
+                        return { url: String(att), description: descriptions[index] || "" };
+                    });
+                }
+                else if (typeof parsed === "object" && parsed.url) {
+                    parsedAttachments = [
+                        { url: parsed.url, description: parsed.description || "" },
+                    ];
+                }
+                else {
+                    parsedAttachments = [
+                        { url: attachments, description: descriptions[0] || "" },
+                    ];
+                }
+            }
+            catch (_c) {
+                parsedAttachments = [
+                    { url: attachments, description: descriptions[0] || "" },
+                ];
+            }
+        }
+        // Parse tag_object_ids
+        let parsedTags = [];
+        if (Array.isArray(tag_object_ids)) {
+            parsedTags = tag_object_ids;
+        }
+        else if (typeof tag_object_ids === "string") {
+            try {
+                const parsed = JSON.parse(tag_object_ids);
+                parsedTags = Array.isArray(parsed) ? parsed : [parsed];
+            }
+            catch (_d) {
+                parsedTags = tag_object_ids ? [tag_object_ids] : [];
+            }
+        }
+        console.log(tag_object_ids);
         const newTaskPayload = {
             title,
             completed,
@@ -144,6 +159,9 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             created_by_user_object_id: user_object_id,
             company_object_id: company_object_id,
             assigned_user_list: parsedAssignedUsers,
+            attachments: parsedAttachments,
+            tag_object_ids: parsedTags,
+            project_object_id: project_object_id || null,
         };
         const newTask = yield new tasks_model_1.default(newTaskPayload).save({ session });
         // Create AssignedTask entries
@@ -158,6 +176,12 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             yield assignedTask_model_1.default.insertMany(assignedTasksPayload, { session });
         }
         yield session.commitTransaction();
+        // Populate the task with all relations
+        const populatedTask = yield tasks_model_1.default.findById(newTask._id)
+            .populate("assigned_users_info", "full_name email profile_picture")
+            .populate("phase_info")
+            .populate("tags_info")
+            .lean();
         // 🔹 Fetch assigned users (email + name)
         const assignedTasks = yield assignedTask_model_1.default.find({
             task_object_id: newTask._id,
@@ -191,7 +215,7 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         }
         res.status(201).json({
             message: "Task created successfully",
-            data: Object.assign(Object.assign({}, newTask.toObject()), { assignedTasks }),
+            data: Object.assign(Object.assign({}, populatedTask), { assignedTasks }),
         });
     }
     catch (error) {
@@ -208,11 +232,14 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 });
 exports.createTask = createTask;
 const getTasks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    console.log("<=======> hit");
     try {
         const { company_object_id, _id: user_object_id } = req.user;
-        const { page, limit, assigned_user_id, phase_object_id, due_date_from, due_date_to, my_tasks, sort_by, sort_order, } = req.query;
-        const startIndex = ((Number(page) || 1) - 1) * (Number(limit) || 10);
-        const endIndex = startIndex + (Number(limit) || 30);
+        const { page, limit, assigned_user_id, phase_object_id, due_date_from, due_date_to, my_tasks, sort_by, sort_order, project_object_id, } = req.query;
+        const currentPage = Number(page) || 1;
+        const pageLimit = Number(limit) || 30;
+        const startIndex = (currentPage - 1) * pageLimit;
+        const endIndex = startIndex + pageLimit;
         // Build dynamic filter
         const filter = { company_object_id: company_object_id };
         // Filter by "My Tasks" - tasks assigned to the logged-in user (takes priority)
@@ -226,6 +253,10 @@ const getTasks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         // Filter by task phase (status) - only filter tasks that have phase_object_id
         if (phase_object_id) {
             filter.phase_object_id = phase_object_id;
+        }
+        // Filter by project
+        if (project_object_id) {
+            filter.project_object_id = project_object_id;
         }
         // Filter by due date range
         if (due_date_from || due_date_to) {
@@ -254,10 +285,17 @@ const getTasks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             sortOptions.createdAt = -1; // Default: newest first
         }
         console.log("Get task all filters : ", filter);
+        // Get total count for pagination
+        const totalTasks = yield tasks_model_1.default.countDocuments(filter);
         const tasks = yield (0, getTask_1.getTaskService)(filter, startIndex, endIndex, sortOptions);
         res.status(200).json({
             message: "Tasks fetched successfully",
             data: tasks,
+            pagination: {
+                currentPage: currentPage,
+                totalCount: totalTasks,
+                totalPages: Math.ceil(totalTasks / pageLimit),
+            },
             filters_applied: {
                 assigned_user_id: assigned_user_id || null,
                 phase_object_id: phase_object_id || null,
@@ -265,6 +303,7 @@ const getTasks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     ? { from: due_date_from, to: due_date_to }
                     : null,
                 my_tasks: my_tasks === "true",
+                project_object_id: project_object_id || null,
             },
         });
     }
@@ -444,10 +483,92 @@ exports.unassignTaskFromUser = unassignTaskFromUser;
 const editTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { taskId } = req.params;
-        const updateData = req.body;
+        const _e = req.body, { attachments, attachment_descriptions, tag_object_id_list } = _e, restOfBody = __rest(_e, ["attachments", "attachment_descriptions", "tag_object_id_list"]);
+        let updateData = Object.assign({}, restOfBody);
+        console.log(tag_object_id_list);
+        // Parse attachments if they exist in the update request
+        if (attachments !== undefined) {
+            let parsedAttachments = [];
+            let descriptions = [];
+            if (Array.isArray(attachment_descriptions)) {
+                descriptions = attachment_descriptions;
+            }
+            else if (typeof attachment_descriptions === "string") {
+                try {
+                    const parsed = JSON.parse(attachment_descriptions);
+                    descriptions = Array.isArray(parsed) ? parsed : [parsed];
+                }
+                catch (_f) {
+                    descriptions = [attachment_descriptions];
+                }
+            }
+            if (Array.isArray(attachments)) {
+                parsedAttachments = attachments.map((att, index) => {
+                    if (typeof att === "object" && att.url) {
+                        return { url: att.url, description: att.description || "" };
+                    }
+                    if (typeof att === "string") {
+                        return { url: att, description: descriptions[index] || "" };
+                    }
+                    return { url: String(att), description: "" };
+                });
+            }
+            else if (typeof attachments === "string") {
+                try {
+                    const parsed = JSON.parse(attachments);
+                    if (Array.isArray(parsed)) {
+                        parsedAttachments = parsed.map((att, index) => {
+                            if (typeof att === "object" && att.url) {
+                                return { url: att.url, description: att.description || "" };
+                            }
+                            return {
+                                url: String(att),
+                                description: descriptions[index] || "",
+                            };
+                        });
+                    }
+                    else if (typeof parsed === "object" && parsed.url) {
+                        parsedAttachments = [
+                            { url: parsed.url, description: parsed.description || "" },
+                        ];
+                    }
+                    else {
+                        parsedAttachments = [
+                            { url: attachments, description: descriptions[0] || "" },
+                        ];
+                    }
+                }
+                catch (_g) {
+                    parsedAttachments = [
+                        { url: attachments, description: descriptions[0] || "" },
+                    ];
+                }
+            }
+            updateData.attachments = parsedAttachments;
+        }
+        // Parse tag_object_ids if provided
+        if (tag_object_id_list !== undefined) {
+            let parsedTags = [];
+            if (Array.isArray(tag_object_id_list)) {
+                parsedTags = tag_object_id_list;
+            }
+            else if (typeof tag_object_id_list === "string") {
+                try {
+                    const parsed = JSON.parse(tag_object_id_list);
+                    parsedTags = Array.isArray(parsed) ? parsed : [parsed];
+                }
+                catch (_h) {
+                    parsedTags = tag_object_id_list ? [tag_object_id_list] : [];
+                }
+            }
+            updateData.tag_object_ids = parsedTags;
+        }
         const updatedTask = yield tasks_model_1.default.findByIdAndUpdate(taskId, updateData, {
             new: true,
-        });
+        })
+            .populate("assigned_users_info", "full_name email profile_picture")
+            .populate("phase_info")
+            .populate("tags_info");
         if (!updatedTask) {
             return res.status(404).json({ message: "Task not found" });
         }

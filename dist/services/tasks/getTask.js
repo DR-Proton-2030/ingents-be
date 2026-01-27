@@ -15,10 +15,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getTaskService = void 0;
 const tasks_model_1 = __importDefault(require("../../models/tasks/tasks.model"));
 const getTaskService = (filter_1, startIndex_1, endIndex_1, ...args_1) => __awaiter(void 0, [filter_1, startIndex_1, endIndex_1, ...args_1], void 0, function* (filter, startIndex, endIndex, sortOptions = {}) {
-    // 1️⃣ Fetch tasks WITH populated assigned users and phase info
+    // 1️⃣ Fetch tasks WITH populated assigned users, phase info, and tags
     const allTasks = yield tasks_model_1.default.find(filter)
         .populate("assigned_users_info", "full_name email profile_picture")
         .populate("phase_info")
+        .populate("tags_info")
         .sort(sortOptions)
         .lean();
     // 2️⃣ Build map
