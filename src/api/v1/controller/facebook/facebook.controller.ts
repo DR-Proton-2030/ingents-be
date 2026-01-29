@@ -36,9 +36,9 @@ export const facebookAuthCallback = async (req: Request, res: Response) => {
     const userId = atob(state as string);
     // Redirect to frontend with token & pages as query params
     res.redirect(
-      `http://localhost:3000/dashboard/social-media?platform=facebook&token=${
+      `${process.env.FRONTEND_URL}/dashboard/social-media?platform=facebook&token=${
         tokens.access_token
-      }&user=${encodeURIComponent(JSON.stringify(user))}&user_id=${userId}`
+      }&user=${encodeURIComponent(JSON.stringify(user))}&user_id=${userId}`,
     );
   } catch (error) {
     console.error("OAuth authentication failed:", error);
@@ -73,10 +73,10 @@ export const fetchFacebookPages = async (req: Request, res: Response) => {
       UserModel.findByIdAndUpdate(
         userId,
         { $set: { "facebook.access_token": longLivedToken } },
-        { new: true }
+        { new: true },
       ),
       axios.get(
-        `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token&access_token=${longLivedToken}`
+        `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token&access_token=${longLivedToken}`,
       ),
     ]);
 
@@ -89,7 +89,7 @@ export const fetchFacebookPages = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error(
       "Error saving token or fetching pages:",
-      error.response?.data || error.message
+      error.response?.data || error.message,
     );
     return res.status(500).json({
       error: "Failed to save token or fetch pages",
@@ -115,7 +115,7 @@ export const getAccessTokenLongTerm = async (req: Request, res: Response) => {
       await UserModel.findByIdAndUpdate(
         { _id: req.query.user_id },
         { $set: userPayload },
-        { new: true }
+        { new: true },
       );
     }
 
@@ -134,7 +134,6 @@ export const getAccessTokenLongTerm = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 // Universal Facebook post: text, image, or video
 export const postFacebookUniversal = async (req: Request, res: Response) => {
@@ -157,16 +156,28 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
         message,
         access_token: pageAccessToken,
       });
-      return res.status(200).json({ success: true, postId: postRes.data.id, message: "Text posted" });
+      return res
+        .status(200)
+        .json({
+          success: true,
+          postId: postRes.data.id,
+          message: "Text posted",
+        });
     }
 
     // If image file uploaded -> upload to S3, save to user, post via URL
     if (uploadedImage || imageUrl) {
       let finalImageUrl = imageUrl;
       if (uploadedImage) {
-        finalImageUrl = await uploadFileToS3Service(`facebook_uploads/${userId}`, uploadedImage.buffer, uploadedImage.mimetype || "image/jpeg");
+        finalImageUrl = await uploadFileToS3Service(
+          `facebook_uploads/${userId}`,
+          uploadedImage.buffer,
+          uploadedImage.mimetype || "image/jpeg",
+        );
         try {
-          await UserModel.findByIdAndUpdate(userId, { $set: { "facebook.last_uploaded_image": finalImageUrl } });
+          await UserModel.findByIdAndUpdate(userId, {
+            $set: { "facebook.last_uploaded_image": finalImageUrl },
+          });
         } catch (dbErr) {
           console.warn("Failed to save image URL:", dbErr);
         }
@@ -177,16 +188,28 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
         caption: message || "",
         access_token: pageAccessToken,
       });
-      return res.status(200).json({ success: true, postId: imgRes.data.id, message: "Image posted" });
+      return res
+        .status(200)
+        .json({
+          success: true,
+          postId: imgRes.data.id,
+          message: "Image posted",
+        });
     }
 
     // If video file uploaded or videoURL provided -> upload to S3 (if file), then post via graph-video endpoint
     if (uploadedVideo || videoURL) {
       let finalVideoUrl = videoURL;
       if (uploadedVideo) {
-        finalVideoUrl = await uploadFileToS3Service(`facebook_uploads/${userId}`, uploadedVideo.buffer, uploadedVideo.mimetype || "video/mp4");
+        finalVideoUrl = await uploadFileToS3Service(
+          `facebook_uploads/${userId}`,
+          uploadedVideo.buffer,
+          uploadedVideo.mimetype || "video/mp4",
+        );
         try {
-          await UserModel.findByIdAndUpdate(userId, { $set: { "facebook.last_uploaded_video": finalVideoUrl } });
+          await UserModel.findByIdAndUpdate(userId, {
+            $set: { "facebook.last_uploaded_video": finalVideoUrl },
+          });
         } catch (dbErr) {
           console.warn("Failed to save video URL:", dbErr);
         }
@@ -201,14 +224,25 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
         },
         {
           headers: { Authorization: `Bearer ${pageAccessToken}` },
-        }
+        },
       );
-      return res.status(200).json({ success: true, videoId: resp.data.id, message: "Video posted" });
+      return res
+        .status(200)
+        .json({
+          success: true,
+          videoId: resp.data.id,
+          message: "Video posted",
+        });
     }
 
     return res.status(400).json({ error: "No valid content to post" });
   } catch (error: any) {
-    console.error("Universal Facebook post error:", error.response?.data || error.message);
-    return res.status(500).json({ success: false, error: error.response?.data || error.message });
+    console.error(
+      "Universal Facebook post error:",
+      error.response?.data || error.message,
+    );
+    return res
+      .status(500)
+      .json({ success: false, error: error.response?.data || error.message });
   }
 };

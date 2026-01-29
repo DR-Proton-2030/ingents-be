@@ -12,7 +12,7 @@ const YT_REDIRECT_URI = process.env.YT_REDIRECT_URI!;
 const oauth2Client = new google.auth.OAuth2(
   YT_CLIENT_ID,
   YT_CLIENT_SECRET,
-  YT_REDIRECT_URI
+  YT_REDIRECT_URI,
 );
 
 export const youtubeAuth = (req: Request, res: Response) => {
@@ -53,7 +53,7 @@ export const youtubeCallback = async (req: Request, res: Response) => {
       const res = await UserModel.findByIdAndUpdate(
         { _id: user_id },
         { $set: { "youtube.access_token": tokens.refresh_token } },
-        { new: true }
+        { new: true },
       );
 
       console.log("...........", res);
@@ -62,7 +62,7 @@ export const youtubeCallback = async (req: Request, res: Response) => {
     //   `http://localhost:5173/user-details/youtube-dashboard?token=${tokens.access_token}&user_id=${userId}`
     // );
     res.redirect(
-      `http://localhost:3000/dashboard/social-media?platform=youtube&token=${tokens.access_token}&user_id=${user_id}`
+      `${process.env.FRONTEND_URL}/dashboard/social-media?platform=youtube&token=${tokens.access_token}&user_id=${user_id}`,
     );
   } catch (error) {
     console.error("Error exchanging code:", error);
