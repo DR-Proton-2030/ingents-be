@@ -14,6 +14,7 @@ import {
   getVideoStatistics,
   getChannelStatistics,
   getYoutubeAllDetails,
+  deleteYoutubeVideo,
 } from "../../controller/youtube/youtube.controller";
 
 const youtubeRouter = express.Router();
@@ -40,5 +41,8 @@ youtubeRouter.post("/subscriptions", getUserSubscriptions);
 youtubeRouter.post("/video/stats", getVideoStatistics);
 youtubeRouter.post("/channel/stats", getChannelStatistics);
 youtubeRouter.get("/channel/get-all-details", getYoutubeAllDetails);
+
+// Delete video
+youtubeRouter.post("/video/delete", deleteYoutubeVideo);
 
 export default youtubeRouter;

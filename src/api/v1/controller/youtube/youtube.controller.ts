@@ -78,7 +78,7 @@ export const youtubeCallback = async (req: Request, res: Response) => {
       if (tokens.refresh_token) {
         updateData["youtube.access_token"] = tokens.refresh_token;
       }
-      
+
       if (Object.keys(updateData).length > 0) {
         await UserModel.findByIdAndUpdate(
           { _id: user_id },
@@ -862,15 +862,21 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
     const { user_id } = req.query;
 
     if (!user_id) {
-      return res.status(400).json({ success: false, message: "User id required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "User id required" });
     }
 
     const user = await UserModel.findById(user_id);
     if (!user || !user.youtube?.access_token) {
-      return res.status(401).json({ success: false, message: "User or YouTube token not found" });
+      return res
+        .status(401)
+        .json({ success: false, message: "User or YouTube token not found" });
     }
 
-    const { youtube, analytics } = await getAuthorizedClient(user.youtube.access_token);
+    const { youtube, analytics } = await getAuthorizedClient(
+      user.youtube.access_token,
+    );
 
     // 1. Get channel info
     const channelResp = await youtube.channels.list({
@@ -879,16 +885,21 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
     });
 
     if (!channelResp.data.items?.length) {
-      return res.status(404).json({ success: false, message: "No channel found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "No channel found" });
     }
 
     const channelData = channelResp.data.items[0];
     const channelId = channelData.id!;
-    const uploadsPlaylistId = channelData.contentDetails?.relatedPlaylists?.uploads;
+    const uploadsPlaylistId =
+      channelData.contentDetails?.relatedPlaylists?.uploads;
 
     // 2. Dates for Analytics (Last 30 days)
     const endDate = new Date().toISOString().split("T")[0];
-    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
 
     // 3. Parallel fetching of various data points
     const [
@@ -899,6 +910,8 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       commentsResp,
       analyticsReport,
       growthReport,
+      ageReport,
+      genderReport,
     ] = await Promise.all([
       uploadsPlaylistId
         ? youtube.playlistItems.list({
@@ -927,46 +940,103 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
         allThreadsRelatedToChannelId: channelId,
         maxResults: 10,
       }),
-      analytics.reports.query({
-        ids: `channel==${channelId}`,
-        startDate,
-        endDate,
-        metrics: "views,estimatedMinutesWatched,averageViewDuration",
-        dimensions: "country",
-        sort: "-views",
-        maxResults: 5,
-      }).catch(e => { console.error("Analytics Error (Locations):", e.message); return null; }),
-      analytics.reports.query({
-        ids: `channel==${channelId}`,
-        startDate,
-        endDate,
-        metrics: "views,subscribersGained",
-        dimensions: "day",
-        sort: "day",
-      }).catch(e => { console.error("Analytics Error (Growth):", e.message); return null; }),
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,estimatedMinutesWatched,averageViewDuration",
+          dimensions: "country",
+          sort: "-views",
+          maxResults: 5,
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Locations):", e.message);
+          return null;
+        }),
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,subscribersGained",
+          dimensions: "day",
+          sort: "day",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Growth):", e.message);
+          return null;
+        }),
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views",
+          dimensions: "ageGroup",
+          sort: "ageGroup",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Age):", e.message);
+          return null;
+        }),
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views",
+          dimensions: "gender",
+          sort: "gender",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Gender):", e.message);
+          return null;
+        }),
     ]);
 
     // 4. Video Stats Classification
-    const videoIds = (videosResp.data.items || []).map(v => v.contentDetails?.videoId).filter((id): id is string => !!id);
+    const videoIds = (videosResp.data.items || [])
+      .map((v) => v.contentDetails?.videoId)
+      .filter((id): id is string => !!id);
     let videoStatsMap: Record<string, any> = {};
     if (videoIds.length > 0) {
       const statsResp = await youtube.videos.list({
-        part: ["statistics", "contentDetails", "status"],
+        part: ["snippet", "statistics", "contentDetails", "status"],
         id: videoIds,
       });
-      statsResp.data.items?.forEach(v => { if (v.id) videoStatsMap[v.id] = v; });
+      statsResp.data.items?.forEach((v) => {
+        if (v.id) videoStatsMap[v.id] = v;
+      });
     }
 
     // Classification counts from activities
     let shortsCount = 0;
     let videosCount = 0;
     let liveCount = 0;
-    
+
     (activitiesResp.data.items || []).forEach((act: any) => {
-      if (act.snippet?.type === 'upload') videosCount++;
-      if (act.snippet?.type === 'liveStream') liveCount++;
+      if (act.snippet?.type === "upload") videosCount++;
+      if (act.snippet?.type === "liveStream") liveCount++;
       // Simplified: Duration < 60s is Short. We can check actual counts from stats mapping if we had more.
     });
+
+    // Build Post Schedule from videos that have a future status.publishAt
+    const postSchedule = Object.values(videoStatsMap)
+      .filter((v: any) => {
+        const publishAt = v.status?.publishAt;
+        return publishAt && new Date(publishAt).getTime() > Date.now();
+      })
+      .map((v: any) => ({
+        id: v.id,
+        title: v.snippet?.title,
+        scheduledAt: v.status?.publishAt,
+        privacyStatus: v.status?.privacyStatus,
+      }))
+      .sort(
+        (a: any, b: any) =>
+          new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
+      );
 
     const result = {
       channel: {
@@ -979,20 +1049,32 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
         branding: channelData.brandingSettings,
       },
       demographics: {
-        topLocations: (analyticsReport?.data as any)?.rows?.map((row: any[]) => ({
-          country: row[0],
-          views: row[1],
-        })) || [],
+        topLocations:
+          (analyticsReport?.data as any)?.rows?.map((row: any[]) => ({
+            country: row[0],
+            views: row[1],
+          })) || [],
+        ageRange:
+          (ageReport?.data as any)?.rows?.map((row: any[]) => ({
+            ageGroup: row[0],
+            views: row[1],
+          })) || [],
+        gender:
+          (genderReport?.data as any)?.rows?.map((row: any[]) => ({
+            gender: row[0],
+            views: row[1],
+          })) || [],
       },
       postActivity: {
         shorts: shortsCount, // Note: Accurate count would need more API logic
         videos: parseInt(channelData.statistics?.videoCount || "0"),
         lives: liveCount,
-        growthTrend: (growthReport?.data as any)?.rows?.map((row: any[]) => ({
-          date: row[0],
-          views: row[1],
-          subscribersGained: row[2],
-        })) || [],
+        growthTrend:
+          (growthReport?.data as any)?.rows?.map((row: any[]) => ({
+            date: row[0],
+            views: row[1],
+            subscribersGained: row[2],
+          })) || [],
       },
       recentVideos: (videosResp.data.items || []).map((item: any) => {
         const vId = item.contentDetails?.videoId;
@@ -1000,28 +1082,33 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
         return {
           id: vId,
           title: item.snippet?.title,
-          publishedAt: item.contentDetails?.videoPublishedAt || item.snippet?.publishedAt,
+          publishedAt:
+            item.contentDetails?.videoPublishedAt || item.snippet?.publishedAt,
           thumbnails: item.snippet?.thumbnails,
           statistics: stats.statistics,
           duration: stats.contentDetails?.duration,
           privacyStatus: stats.status?.privacyStatus,
         };
       }),
-      recentSubscribers: (subscriptionsResp.data.items || []).map((item: any) => ({
-        channelId: item.subscriberSnippet?.channelId,
-        title: item.subscriberSnippet?.title,
-        thumbnails: item.subscriberSnippet?.thumbnails,
-        subscribedAt: item.snippet?.publishedAt,
-      })),
+      recentSubscribers: (subscriptionsResp.data.items || []).map(
+        (item: any) => ({
+          channelId: item.subscriberSnippet?.channelId,
+          title: item.subscriberSnippet?.title,
+          thumbnails: item.subscriberSnippet?.thumbnails,
+          subscribedAt: item.snippet?.publishedAt,
+        }),
+      ),
       recentComments: (commentsResp.data.items || []).map((thread: any) => ({
         id: thread.id,
         videoId: thread.snippet?.videoId,
         text: thread.snippet?.topLevelComment?.snippet?.textDisplay,
         author: thread.snippet?.topLevelComment?.snippet?.authorDisplayName,
-        authorProfileImageUrl: thread.snippet?.topLevelComment?.snippet?.authorProfileImageUrl,
+        authorProfileImageUrl:
+          thread.snippet?.topLevelComment?.snippet?.authorProfileImageUrl,
         publishedAt: thread.snippet?.topLevelComment?.snippet?.publishedAt,
         replyCount: thread.snippet?.totalReplyCount,
       })),
+      postSchedule,
     };
 
     return res.status(200).json({ success: true, result });
@@ -1030,6 +1117,40 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch all youtube details",
+      error: error.message,
+    });
+  }
+};
+
+export const deleteYoutubeVideo = async (req: Request, res: Response) => {
+  try {
+    const { user_id, videoId } = req.body;
+
+    if (!user_id || !videoId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "user_id and videoId required" });
+    }
+
+    const user = await UserModel.findById(user_id);
+    if (!user || !user.youtube?.access_token) {
+      return res
+        .status(401)
+        .json({ success: false, message: "User or YouTube token not found" });
+    }
+
+    const { youtube } = await getAuthorizedClient(user.youtube.access_token);
+
+    await youtube.videos.delete({ id: videoId });
+
+    return res
+      .status(200)
+      .json({ success: true, message: "Video deleted successfully" });
+  } catch (error: any) {
+    console.error("Error deleting video:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete video",
       error: error.message,
     });
   }
