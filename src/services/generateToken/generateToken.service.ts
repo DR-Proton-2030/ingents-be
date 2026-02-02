@@ -4,7 +4,7 @@ import { ItokenPayload } from "../../types/interface/tokenPayload.interface";
 
 const generateToken = (
   payload: ItokenPayload,
-  expiresIn: SignOptions["expiresIn"] = "3h"
+  expiresIn: SignOptions["expiresIn"] = "7d"
 ): string => {
   if (!jwtSecret) {
     throw new Error("JWT secret is not defined");

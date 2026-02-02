@@ -13,13 +13,14 @@ export const userAuth = (req: Request, res: Response, next: NextFunction) => {
   try {
     const decoded = verifyToken(token);
     if (!decoded) {
-      res.status(403).json({ message: "Invalid token" });
+      // Note: verifyToken already logs the specific error (expired vs invalid)
+      res.status(401).json({ message: "Unauthorized: Invalid or expired token" });
       return;
     }
     req.user = decoded; // Attach user data to request
     next();
   } catch (error) {
-    res.status(403).json({ message: "Invalid token" });
+    res.status(401).json({ message: "Unauthorized" });
     return;
   }
 };

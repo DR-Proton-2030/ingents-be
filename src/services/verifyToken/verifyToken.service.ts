@@ -9,8 +9,12 @@ export const verifyToken = (token: string): ItokenPayload | null => {
     }
     const decoded = jwt.verify(token, jwtSecret) as ItokenPayload;
     return decoded;
-  } catch (error) {
-    console.error("Token verification failed:", error);
+  } catch (error: any) {
+    if (error.name === "TokenExpiredError") {
+      console.warn("Token expired:", error.expiredAt);
+    } else {
+      console.error("Token verification failed:", error.message);
+    }
     return null;
   }
 };

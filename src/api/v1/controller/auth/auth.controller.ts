@@ -102,7 +102,7 @@ export const signUp = async (req: Request, res: Response) => {
       secure: NODE_ENV === "production", // Use secure cookies in production
       sameSite: NODE_ENV === "production" ? "none" : "lax",
       path: "/", // Makes cookie accessible across the entire app
-      maxAge: 3 * 60 * 60 * 1000, // 3 hours expiration
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days expiration
       domain: NODE_ENV === "production" ? ".ingents.ai" : "localhost", // Set domain for production
     });
 
@@ -176,7 +176,7 @@ export const signIn = async (req: Request, res: Response) => {
       secure: NODE_ENV === "production",
       sameSite: NODE_ENV === "production" ? "none" : "strict",
       path: "/",
-      maxAge: 3 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
       ...(NODE_ENV === "production" && { domain: ".ingents.ai" }), // ✅ SAFE
     });
 
