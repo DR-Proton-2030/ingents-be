@@ -6,6 +6,7 @@ import {
   fetchFacebookPages,
   getAccessTokenLongTerm,
   postFacebookUniversal,
+  getFacebookAllDetails,
 } from "../../controller/facebook/facebook.controller";
 
 const router = express.Router();
@@ -30,7 +31,10 @@ router.post(
     { name: "image", maxCount: 1 },
     { name: "video", maxCount: 1 },
   ]),
-  postFacebookUniversal
+  postFacebookUniversal,
 );
+
+//  Aggregated Page Details
+router.get("/page/get-all-details", getFacebookAllDetails);
 
 export default router;
