@@ -11,6 +11,7 @@ import Facebookrouter from "./api/v1/routes/facebook/facebook.route";
 import userRouter from "./api/v1/routes/user/user.route";
 import instagramRouter from "./api/v1/routes/instagram/instagram.route";
 import youtubeRouter from "./api/v1/routes/youtube/youtube.route";
+import xRouter from "./api/v1/routes/x/x.route";
 import bankRouter from "./api/v1/routes/bank/bank.routes";
 import taskRouter from "./api/v1/routes/tasks/tasks.routes";
 import taskPhaseRouter from "./api/v1/routes/taskPhase/taskPhase.routes";
@@ -20,7 +21,6 @@ import httpLoggerMiddleware from "./api/v1/middlewares/ipTracker/httpLogger.midd
 import waitListRouter from "./api/v1/routes/waitlist/waitList.routes";
 import meetingRouter from "./api/v1/routes/meeting/meeting.routes";
 import projectRouter from "./api/v1/routes/project/project.routes";
-
 
 const app = express();
 
@@ -63,6 +63,7 @@ app.use("/api/v1/email-templates", emailTemplateRouter);
 app.use("/api/v1/facebook", Facebookrouter);
 app.use("/api/v1/ig", instagramRouter);
 app.use("/api/v1/youtube", youtubeRouter);
+app.use("/api/v1/x", xRouter);
 app.use("/api/v1/bank", bankRouter);
 app.use("/api/v1/tasks", taskRouter);
 app.use("/api/v1/task-phase", taskPhaseRouter);
@@ -70,7 +71,6 @@ app.use("/api/v1/task-tags", tagRouter);
 app.use("/api/v1/waitlist", waitListRouter);
 app.use("/api/v1/meetings", meetingRouter);
 app.use("/api/v1/projects", projectRouter);
-
 
 // Default route for health check
 app.get("/", (req, res) => {

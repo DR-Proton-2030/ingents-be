@@ -10,12 +10,12 @@ const userSchema: Schema<IUser> = new Schema<IUser>(
     full_name: SCHEMA_DEFINITION_PROPERTY.requiredString,
     email: { ...SCHEMA_DEFINITION_PROPERTY.requiredString, unique: true },
     company_object_id: SCHEMA_DEFINITION_PROPERTY.requiredObjectId,
-     has_joined: {
+    has_joined: {
       type: Boolean,
       required: true,
       default: false,
     },
-    role: {...SCHEMA_DEFINITION_PROPERTY.requiredString, enum: USER_ROLES },
+    role: { ...SCHEMA_DEFINITION_PROPERTY.requiredString, enum: USER_ROLES },
     password: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     emp_id: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     profile_picture: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
@@ -34,12 +34,19 @@ const userSchema: Schema<IUser> = new Schema<IUser>(
       name: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
       access_token: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     },
+    x: {
+      project_id: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+      name: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+      access_token: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+      refresh_token: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+      pkce_verifier: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+    },
   },
   {
     ...GENERAL_SCHEMA_OPTIONS,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-  }
+  },
 );
 
 const CompanyVirtualReference: VirtualTypeOptions<ICompany> = {

@@ -1,6 +1,6 @@
 import { SchemaDefinitionProperty, Types } from "mongoose";
 
-export type UserRole = 'company_admin' | 'employee' | 'manager';
+export type UserRole = "company_admin" | "employee" | "manager";
 export interface IUser {
   full_name: string;
   email: string;
@@ -24,5 +24,12 @@ export interface IUser {
     project_id: string;
     name: string;
     access_token: string;
+  };
+  x?: {
+    project_id?: string;
+    name?: string;
+    access_token?: string;
+    refresh_token?: string;
+    pkce_verifier?: string | null;
   };
 }
