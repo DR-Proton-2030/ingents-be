@@ -7,6 +7,7 @@ import {
   getXUserProfile,
 } from "../../../../services/x/x.service";
 import UserModel from "../../../../models/users/users.model";
+import { uploadFileToS3Service } from "../../../../services/uploadFile/uploadFile";
 
 const TWITTER_API_BASE = "https://api.twitter.com/2";
 
@@ -135,6 +136,116 @@ export const getXProfile = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch X profile",
+      error: error.response?.data || error.message,
+    });
+  }
+};
+
+// Universal X post: text, image (URL or file), or video (URL or file)
+export const postXUniversal = async (req: Request, res: Response) => {
+  try {
+    const { userId, message, imageUrl, videoURL, hashtags } = req.body as {
+      userId?: string;
+      message?: string;
+      imageUrl?: string;
+      videoURL?: string;
+      hashtags?: string | string[];
+    };
+    const uploadedImage = (req as any).files?.image?.[0];
+    const uploadedVideo = (req as any).files?.video?.[0];
+
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "userId is required" });
+    }
+
+    // Get user's X access token
+    const user = await UserModel.findById(userId);
+    const accessToken = user?.x?.access_token;
+    if (!accessToken) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized - Missing X access token",
+      });
+    }
+
+    // Prepare final media URLs if files uploaded (upload to S3), else use provided URLs
+    let finalImageUrl: string | undefined = imageUrl;
+    let finalVideoUrl: string | undefined = videoURL;
+    if (uploadedImage) {
+      const uploadedUrl = await uploadFileToS3Service(
+        `x_uploads/${userId}`,
+        uploadedImage.buffer,
+        uploadedImage.mimetype || "image/jpeg",
+      );
+      finalImageUrl = uploadedUrl || undefined;
+    }
+    if (uploadedVideo) {
+      const uploadedUrl = await uploadFileToS3Service(
+        `x_uploads/${userId}`,
+        uploadedVideo.buffer,
+        uploadedVideo.mimetype || "video/mp4",
+      );
+      finalVideoUrl = uploadedUrl || undefined;
+    }
+
+    // Compose tweet text; media will be shared via URL in text (no media upload here)
+    const parts: string[] = [];
+    if (message) parts.push(message);
+    if (finalImageUrl) parts.push(finalImageUrl);
+    if (finalVideoUrl) parts.push(finalVideoUrl);
+    // Append hashtags if provided
+    try {
+      let tags: string[] = [];
+      if (Array.isArray(hashtags)) {
+        tags = hashtags as string[];
+      } else if (typeof hashtags === "string") {
+        tags = (hashtags as string).split(/[\s,]+/);
+      }
+      const formatted = tags
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .map((t) => (t.startsWith("#") ? t.slice(1) : t))
+        .map((t) => t.replace(/[^A-Za-z0-9_]/g, ""))
+        .filter(Boolean)
+        .map((t) => `#${t}`);
+      if (formatted.length) parts.push(formatted.join(" "));
+    } catch (_) {
+      // ignore hashtag formatting errors
+    }
+    let text = parts.join(" \n").trim();
+    // Optional: enforce tweet length to avoid API errors
+    const MAX_TWEET_LENGTH = 280;
+    if (text.length > MAX_TWEET_LENGTH) {
+      text = text.slice(0, MAX_TWEET_LENGTH);
+    }
+
+    if (!text) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No valid content to post" });
+    }
+
+    const resp = await axios.post(
+      `${TWITTER_API_BASE}/tweets`,
+      { text },
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+
+    return res.status(200).json({
+      success: true,
+      tweetId: resp.data?.data?.id,
+      message: "Tweet posted",
+    });
+  } catch (error: any) {
+    console.error(
+      "Universal X post error:",
+      error.response?.data || error.message,
+    );
+    return res.status(500).json({
+      success: false,
+      message: "Failed to post on X",
       error: error.response?.data || error.message,
     });
   }

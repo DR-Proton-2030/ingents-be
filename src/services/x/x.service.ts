@@ -35,7 +35,12 @@ export const getXAuthURL = async (userId: string) => {
   });
 
   const state = Buffer.from(userId).toString("base64");
-  const scope = ["tweet.read", "users.read", "offline.access"].join(" ");
+  const scope = [
+    "tweet.read",
+    "tweet.write",
+    "users.read",
+    "offline.access",
+  ].join(" ");
 
   const params = new URLSearchParams({
     response_type: "code",
