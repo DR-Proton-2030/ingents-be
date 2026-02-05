@@ -4,6 +4,7 @@ import {
   getFacebookUser,
   getLongLivedToken,
   getPageTokenService,
+  resolveScheduledPublishTime,
 } from "../../../../services/facebook/facebook.service";
 import axios from "axios";
 import FormData from "form-data";
@@ -141,6 +142,7 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
     const { userId, pageId, message, imageUrl, videoURL } = req.body;
     const uploadedImage = (req as any).files?.image?.[0];
     const uploadedVideo = (req as any).files?.video?.[0];
+    const scheduledPublishTime = resolveScheduledPublishTime(req.body);
 
     if (!userId || !pageId) {
       return res.status(400).json({ error: "userId and pageId are required" });
@@ -151,15 +153,51 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
 
     // Priority: if message only, post text; if image present (file or url), post image; if video present, post video
     if (message && !uploadedImage && !uploadedVideo && !imageUrl && !videoURL) {
-      // Text only
-      const postRes = await axios.post(`${FACEBOOK_GRAPH_URL}/${id}/feed`, {
+      // Text only (immediate or scheduled)
+      const payload: any = {
         message,
         access_token: pageAccessToken,
-      });
+      };
+      if (scheduledPublishTime) {
+        // Facebook scheduled post requires published=false
+        payload.published = false;
+        payload.scheduled_publish_time = scheduledPublishTime;
+      }
+      const postRes = await axios.post(
+        `${FACEBOOK_GRAPH_URL}/${id}/feed`,
+        payload,
+      );
+      if (scheduledPublishTime) {
+        // Fetch more details for the scheduled post
+        const detailsRes = await axios.get(
+          `${FACEBOOK_GRAPH_URL}/${postRes.data.id}?fields=id,message,scheduled_publish_time,permalink_url,created_time,is_published`,
+          { headers: { Authorization: `Bearer ${pageAccessToken}` } },
+        );
+        const sp = detailsRes.data || {};
+        const scheduledDetails = {
+          id: sp.id || postRes.data.id,
+          title: sp.message || message || "",
+          scheduledAt: sp.scheduled_publish_time
+            ? new Date(sp.scheduled_publish_time * 1000).toISOString()
+            : new Date(scheduledPublishTime * 1000).toISOString(),
+          permalink_url: sp.permalink_url,
+          created_time: sp.created_time,
+          is_published: Boolean(sp.is_published),
+        };
+        return res.status(200).json({
+          success: true,
+          scheduled: true,
+          scheduled_publish_time: scheduledPublishTime,
+          details: scheduledDetails,
+          message: "Text scheduled",
+        });
+      }
       return res.status(200).json({
         success: true,
         postId: postRes.data.id,
-        message: "Text posted",
+        scheduled: Boolean(scheduledPublishTime),
+        scheduled_publish_time: scheduledPublishTime || undefined,
+        message: scheduledPublishTime ? "Text scheduled" : "Text posted",
       });
     }
 
@@ -181,15 +219,51 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
         }
       }
 
-      const imgRes = await axios.post(`${FACEBOOK_GRAPH_URL}/${id}/photos`, {
+      const imgPayload: any = {
         url: finalImageUrl,
         caption: message || "",
         access_token: pageAccessToken,
-      });
+      };
+      if (scheduledPublishTime) {
+        imgPayload.published = false;
+        imgPayload.scheduled_publish_time = scheduledPublishTime;
+      }
+
+      const imgRes = await axios.post(
+        `${FACEBOOK_GRAPH_URL}/${id}/photos`,
+        imgPayload,
+      );
+      if (scheduledPublishTime) {
+        const detailsRes = await axios.get(
+          `${FACEBOOK_GRAPH_URL}/${imgRes.data.id}?fields=id,caption,scheduled_publish_time,permalink_url,full_picture,created_time,is_published`,
+          { headers: { Authorization: `Bearer ${pageAccessToken}` } },
+        );
+        const sp = detailsRes.data || {};
+        const scheduledDetails = {
+          id: sp.id || imgRes.data.id,
+          title: sp.caption || message || "",
+          scheduledAt: sp.scheduled_publish_time
+            ? new Date(sp.scheduled_publish_time * 1000).toISOString()
+            : new Date(scheduledPublishTime * 1000).toISOString(),
+          permalink_url: sp.permalink_url,
+          full_picture: sp.full_picture,
+          created_time: sp.created_time,
+          is_published: Boolean(sp.is_published),
+        };
+        return res.status(200).json({
+          success: true,
+          scheduled: true,
+          scheduled_publish_time: scheduledPublishTime,
+          details: scheduledDetails,
+          message: "Image scheduled",
+        });
+      }
       return res.status(200).json({
         success: true,
         postId: imgRes.data.id,
-        message: "Image posted",
+        scheduled: Boolean(scheduledPublishTime),
+        scheduled_publish_time: scheduledPublishTime || undefined,
+        message: scheduledPublishTime ? "Image scheduled" : "Image posted",
       });
     }
 
@@ -212,20 +286,49 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
       }
 
       const uploadUrl = `https://graph-video.facebook.com/v19.0/${id}/videos`;
-      const resp = await axios.post(
-        uploadUrl,
-        {
-          file_url: finalVideoUrl,
-          title: message || "",
-        },
-        {
+      const vidPayload: any = {
+        file_url: finalVideoUrl,
+        title: message || "",
+      };
+      if (scheduledPublishTime) {
+        vidPayload.published = false;
+        vidPayload.scheduled_publish_time = scheduledPublishTime;
+      }
+      const resp = await axios.post(uploadUrl, vidPayload, {
+        headers: { Authorization: `Bearer ${pageAccessToken}` },
+      });
+      if (scheduledPublishTime) {
+        const detailsUrl = `https://graph-video.facebook.com/v19.0/${resp.data.id}?fields=id,permalink_url,scheduled_publish_time,title,description,created_time,thumbnails{uri},is_published`;
+        const detailsRes = await axios.get(detailsUrl, {
           headers: { Authorization: `Bearer ${pageAccessToken}` },
-        },
-      );
+        });
+        const sp = detailsRes.data || {};
+        const thumb = sp.thumbnails?.data?.[0]?.uri;
+        const scheduledDetails = {
+          id: sp.id || resp.data.id,
+          title: sp.title || message || "",
+          scheduledAt: sp.scheduled_publish_time
+            ? new Date(sp.scheduled_publish_time * 1000).toISOString()
+            : new Date(scheduledPublishTime * 1000).toISOString(),
+          permalink_url: sp.permalink_url,
+          thumbnail: thumb,
+          created_time: sp.created_time,
+          is_published: Boolean(sp.is_published),
+        };
+        return res.status(200).json({
+          success: true,
+          scheduled: true,
+          scheduled_publish_time: scheduledPublishTime,
+          details: scheduledDetails,
+          message: "Video scheduled",
+        });
+      }
       return res.status(200).json({
         success: true,
         videoId: resp.data.id,
-        message: "Video posted",
+        scheduled: Boolean(scheduledPublishTime),
+        scheduled_publish_time: scheduledPublishTime || undefined,
+        message: scheduledPublishTime ? "Video scheduled" : "Video posted",
       });
     }
 
@@ -297,7 +400,7 @@ export const getFacebookAllDetails = async (req: Request, res: Response) => {
         }),
       axios
         .get(
-          `${FACEBOOK_GRAPH_URL}/${pid}/scheduled_posts?fields=id,message,scheduled_publish_time,permalink_url`,
+          `${FACEBOOK_GRAPH_URL}/${pid}/scheduled_posts?fields=id,message,scheduled_publish_time,permalink_url,full_picture,status_type,created_time,is_published`,
           { headers },
         )
         .catch(() => ({ data: { data: [] } })),
@@ -419,6 +522,9 @@ export const getFacebookAllDetails = async (req: Request, res: Response) => {
           : undefined,
         permalink_url: sp.permalink_url,
         full_picture: sp.full_picture,
+        status_type: sp.status_type,
+        created_time: sp.created_time,
+        is_published: Boolean(sp.is_published),
       }))
       .filter((s: any) => !!s.scheduledAt)
       .sort(

@@ -10,9 +10,8 @@ const REDIRECT_URI = process.env.FACEBOOK_REDIRECT_URI!;
 const FACEBOOK_GRAPH_URL = "https://graph.facebook.com";
 
 export const getFacebookAuthURL = (userId: string) => {
-  
   const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FACEBOOK_CLIENT_ID}&redirect_uri=${encodeURIComponent(
-    REDIRECT_URI
+    REDIRECT_URI,
   )}&scope=email,public_profile,pages_read_engagement,pages_manage_posts,pages_show_list&response_type=code&state=${userId}`;
   return authUrl;
 };
@@ -32,7 +31,7 @@ export const getFacebookUser = async (code: string) => {
 
   // Fetch user details
   const userResponse = await axios.get(
-    `https://graph.facebook.com/me?fields=id,name,email&access_token=${accessToken}`
+    `https://graph.facebook.com/me?fields=id,name,email&access_token=${accessToken}`,
   );
   console.log(userResponse);
   return { tokens: { access_token: accessToken }, user: userResponse.data };
@@ -74,7 +73,7 @@ export const getLongLivedToken = async (access_token: string) => {
         client_secret: FACEBOOK_CLIENT_SECRET,
         fb_exchange_token: access_token,
       },
-    }
+    },
   );
   console.log("Long-Lived Token:", res.data.access_token);
   return res.data.access_token;
@@ -92,7 +91,7 @@ export const getPageTokenService = async (userId: string, pageId: string) => {
   const userAccessToken = user.facebook.access_token;
 
   const pagesRes = await axios.get(
-    `https://graph.facebook.com/v20.0/me/accounts?access_token=${userAccessToken}`
+    `https://graph.facebook.com/v20.0/me/accounts?access_token=${userAccessToken}`,
   );
   const pageData = pagesRes.data?.data?.find((p: any) => p.id === pageId);
   if (!pageData) {
@@ -106,4 +105,39 @@ export const getPageTokenService = async (userId: string, pageId: string) => {
     category: pageData.category,
     user,
   };
+};
+
+// Helper to resolve scheduled publish time in UNIX seconds
+export const resolveScheduledPublishTime = (body: any): number | null => {
+  try {
+    if (!body) return null;
+    // Accept multiple input styles
+    const raw =
+      body.scheduled_publish_time ??
+      body.scheduleAt ??
+      body.scheduledAt ??
+      null;
+    if (raw) {
+      // If already a number (seconds) or string number
+      const num = Number(raw);
+      if (!Number.isNaN(num)) {
+        // If looks like milliseconds, convert to seconds
+        return num > 1e12 ? Math.floor(num / 1000) : Math.floor(num);
+      }
+      // ISO string
+      const d = new Date(String(raw));
+      if (!isNaN(d.getTime())) return Math.floor(d.getTime() / 1000);
+    }
+    // Composite date + time
+    if (body.scheduleDate && body.scheduleTime) {
+      const composed = new Date(
+        `${body.scheduleDate}T${body.scheduleTime}:00Z`,
+      );
+      if (!isNaN(composed.getTime()))
+        return Math.floor(composed.getTime() / 1000);
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
 };

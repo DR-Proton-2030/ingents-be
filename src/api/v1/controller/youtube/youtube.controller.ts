@@ -3,6 +3,10 @@ import { google, youtube_v3 } from "googleapis";
 import { config } from "dotenv";
 import UserModel from "../../../../models/users/users.model";
 import axios from "axios";
+import {
+  getAuthorizedClient,
+  resolveYouTubePublishAt,
+} from "../../../../services/youtube/youtube.service";
 config();
 
 const YT_CLIENT_ID = process.env.YT_CLIENT_ID!;
@@ -14,25 +18,6 @@ const oauth2Client = new google.auth.OAuth2(
   YT_CLIENT_SECRET,
   YT_REDIRECT_URI,
 );
-
-/** Helper to get an authorized YouTube client using a refresh token */
-const getAuthorizedClient = async (refreshToken: string) => {
-  const client = new google.auth.OAuth2(
-    YT_CLIENT_ID,
-    YT_CLIENT_SECRET,
-    YT_REDIRECT_URI,
-  );
-  client.setCredentials({ refresh_token: refreshToken });
-  const accessTokenResponse = await client.getAccessToken();
-  client.setCredentials({
-    access_token: accessTokenResponse?.token || refreshToken,
-    refresh_token: refreshToken,
-  });
-  return {
-    youtube: google.youtube({ version: "v3", auth: client }),
-    analytics: google.youtubeAnalytics({ version: "v2", auth: client }),
-  };
-};
 
 export const youtubeAuth = (req: Request, res: Response) => {
   const appUserId = req.query.user_id as string;
@@ -156,6 +141,9 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
   try {
     const { user_id, title, description, tags, privacyStatus, videoURL } =
       req.body;
+    const { iso: publishAtISO, error: scheduleError } = resolveYouTubePublishAt(
+      req.body,
+    );
 
     if (!user_id) {
       return res.status(400).json({
@@ -202,6 +190,19 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
     const response = await axios.get(videoURL, { responseType: "stream" });
 
     // Upload video to YouTube
+    if (scheduleError) {
+      return res.status(400).json({ success: false, message: scheduleError });
+    }
+
+    const status: youtube_v3.Schema$VideoStatus = {
+      privacyStatus: privacyStatus || "public",
+    };
+    if (publishAtISO) {
+      // Scheduled publishing requires initial privacyStatus to be private
+      status.privacyStatus = "private";
+      status.publishAt = publishAtISO;
+    }
+
     const uploadResponse = await youtube.videos.insert({
       part: ["snippet", "status"],
       requestBody: {
@@ -210,9 +211,7 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
           description: description || "",
           tags: tags || [],
         },
-        status: {
-          privacyStatus: privacyStatus || "public",
-        },
+        status,
       },
       media: {
         body: response.data,
@@ -220,6 +219,21 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
     });
 
     const videoId = uploadResponse.data.id;
+
+    if (publishAtISO) {
+      return res.status(200).json({
+        success: true,
+        scheduled: true,
+        details: {
+          id: videoId,
+          title: title || uploadResponse.data.snippet?.title,
+          scheduledAt: publishAtISO,
+          privacyStatus: status.privacyStatus,
+          videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        },
+        message: "Video scheduled for publishing",
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -1032,6 +1046,7 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
         title: v.snippet?.title,
         scheduledAt: v.status?.publishAt,
         privacyStatus: v.status?.privacyStatus,
+        thumbnails: v.snippet?.thumbnails,
       }))
       .sort(
         (a: any, b: any) =>
