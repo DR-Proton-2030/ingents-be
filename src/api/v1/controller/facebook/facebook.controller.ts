@@ -5,6 +5,7 @@ import {
   getLongLivedToken,
   getPageTokenService,
   resolveScheduledPublishTime,
+  validateScheduledPublishTime,
 } from "../../../../services/facebook/facebook.service";
 import axios from "axios";
 import FormData from "form-data";
@@ -144,6 +145,16 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
     const uploadedVideo = (req as any).files?.video?.[0];
     const scheduledPublishTime = resolveScheduledPublishTime(req.body);
 
+    // Validate scheduled publish time early to avoid Graph API errors
+    const scheduleValidationError =
+      validateScheduledPublishTime(scheduledPublishTime);
+    if (scheduleValidationError) {
+      return res.status(400).json({
+        success: false,
+        message: scheduleValidationError,
+      });
+    }
+
     if (!userId || !pageId) {
       return res.status(400).json({ error: "userId and pageId are required" });
     }
@@ -221,7 +232,8 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
 
       const imgPayload: any = {
         url: finalImageUrl,
-        caption: message || "",
+        // 'caption' is not a valid field on Photo; use 'message' for the photo's caption
+        message: message || "",
         access_token: pageAccessToken,
       };
       if (scheduledPublishTime) {
@@ -234,29 +246,43 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
         imgPayload,
       );
       if (scheduledPublishTime) {
-        const detailsRes = await axios.get(
-          `${FACEBOOK_GRAPH_URL}/${imgRes.data.id}?fields=id,caption,scheduled_publish_time,permalink_url,full_picture,created_time,is_published`,
-          { headers: { Authorization: `Bearer ${pageAccessToken}` } },
-        );
-        const sp = detailsRes.data || {};
-        const scheduledDetails = {
-          id: sp.id || imgRes.data.id,
-          title: sp.caption || message || "",
-          scheduledAt: sp.scheduled_publish_time
-            ? new Date(sp.scheduled_publish_time * 1000).toISOString()
-            : new Date(scheduledPublishTime * 1000).toISOString(),
-          permalink_url: sp.permalink_url,
-          full_picture: sp.full_picture,
-          created_time: sp.created_time,
-          is_published: Boolean(sp.is_published),
-        };
-        return res.status(200).json({
-          success: true,
-          scheduled: true,
-          scheduled_publish_time: scheduledPublishTime,
-          details: scheduledDetails,
-          message: "Image scheduled",
-        });
+        try {
+          // Do not request 'scheduled_publish_time' on Photo node to avoid errors
+          const detailsRes = await axios.get(
+            `${FACEBOOK_GRAPH_URL}/${imgRes.data.id}?fields=id,name,permalink_url,full_picture,created_time,is_published`,
+            { headers: { Authorization: `Bearer ${pageAccessToken}` } },
+          );
+          const sp = detailsRes.data || {};
+          const scheduledDetails = {
+            id: sp.id || imgRes.data.id,
+            title: sp.name || message || "",
+            scheduledAt: new Date(scheduledPublishTime * 1000).toISOString(),
+            permalink_url: sp.permalink_url,
+            full_picture: sp.full_picture,
+            created_time: sp.created_time,
+            is_published: Boolean(sp.is_published),
+          };
+          return res.status(200).json({
+            success: true,
+            scheduled: true,
+            scheduled_publish_time: scheduledPublishTime,
+            details: scheduledDetails,
+            message: "Image scheduled",
+          });
+        } catch (_) {
+          // Fallback if details fetch fails
+          return res.status(200).json({
+            success: true,
+            scheduled: true,
+            scheduled_publish_time: scheduledPublishTime,
+            details: {
+              id: imgRes.data.id,
+              title: message || "",
+              scheduledAt: new Date(scheduledPublishTime * 1000).toISOString(),
+            },
+            message: "Image scheduled",
+          });
+        }
       }
       return res.status(200).json({
         success: true,

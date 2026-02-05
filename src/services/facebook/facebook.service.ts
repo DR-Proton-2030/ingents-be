@@ -116,6 +116,7 @@ export const resolveScheduledPublishTime = (body: any): number | null => {
       body.scheduled_publish_time ??
       body.scheduleAt ??
       body.scheduledAt ??
+      body.publishAt ??
       null;
     if (raw) {
       // If already a number (seconds) or string number
@@ -140,4 +141,24 @@ export const resolveScheduledPublishTime = (body: any): number | null => {
   } catch (_) {
     return null;
   }
+};
+
+// Validate scheduled publish time per Facebook constraints
+// - Must be at least 10 minutes in the future
+// - Must be no more than 75 days in the future
+export const validateScheduledPublishTime = (
+  scheduledPublishTime: number | null,
+): string | null => {
+  if (!scheduledPublishTime) return null; // no scheduling -> valid
+  const nowSec = Math.floor(Date.now() / 1000);
+  const minFuture = nowSec + 10 * 60; // 10 minutes
+  const maxFuture = nowSec + 75 * 24 * 60 * 60; // 75 days
+
+  if (scheduledPublishTime < minFuture) {
+    return "scheduled_publish_time must be at least 10 minutes in the future";
+  }
+  if (scheduledPublishTime > maxFuture) {
+    return "scheduled_publish_time cannot be more than 75 days in the future";
+  }
+  return null;
 };
