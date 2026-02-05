@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { google, youtube_v3 } from "googleapis";
 import { config } from "dotenv";
 import UserModel from "../../../../models/users/users.model";
+import PostedContentModel from "../../../../models/postedContent/postedContent.model";
+import ScheduledPostModel from "../../../../models/scheduledPost/scheduledPost.model";
 import axios from "axios";
 import {
   getAuthorizedClient,
@@ -21,6 +23,14 @@ const oauth2Client = new google.auth.OAuth2(
 
 export const youtubeAuth = (req: Request, res: Response) => {
   const appUserId = req.query.user_id as string;
+  
+  if (!appUserId) {
+    return res.status(400).json({
+      success: false,
+      message: "user_id is required",
+    });
+  }
+  
   const scopes = [
     "https://www.googleapis.com/auth/youtube",
     "https://www.googleapis.com/auth/youtube.readonly",
@@ -43,10 +53,26 @@ export const youtubeAuth = (req: Request, res: Response) => {
 
 export const youtubeCallback = async (req: Request, res: Response) => {
   const { code, state } = req.query;
-  console.log("Code and stste <=======>", code, state);
-  const user_id = atob(state as string);
+  console.log("Code and state <=======>", code, state);
+  
+  if (!state || typeof state !== "string") {
+    return res.status(400).json({
+      success: false,
+      message: "State parameter is missing",
+    });
+  }
+  
+  const user_id = atob(state);
   console.log("<======> user id : ", user_id);
-  console.log(user_id);
+  
+  // Validate user_id is a valid ObjectId (24 hex characters)
+  if (!user_id || user_id === "undefined" || !/^[a-fA-F0-9]{24}$/.test(user_id)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid user_id in state parameter",
+    });
+  }
+  
   if (!code || typeof code !== "string") {
     return res.status(400).json({
       success: false,
@@ -221,6 +247,23 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
     const videoId = uploadResponse.data.id;
 
     if (publishAtISO) {
+      // Save scheduled video to database
+      await ScheduledPostModel.create({
+        user_id,
+        platform: "youtube",
+        content: title || "Untitled Video",
+        media_urls: [videoURL],
+        media_type: "video",
+        scheduled_at: new Date(publishAtISO),
+        status: "completed",
+        platform_specific_data: {
+          description,
+          tags,
+          videoId,
+          privacyStatus: status.privacyStatus,
+        },
+      });
+
       return res.status(200).json({
         success: true,
         scheduled: true,
@@ -234,6 +277,24 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
         message: "Video scheduled for publishing",
       });
     }
+
+    // Save posted video to database
+    await PostedContentModel.create({
+      user_id,
+      platform: "youtube",
+      content: title || "Untitled Video",
+      media_urls: [videoURL],
+      posted_at: new Date(),
+      platform_post_id: videoId,
+      is_scheduled: false,
+      status: "published",
+      platform_specific_data: {
+        description,
+        tags,
+        privacyStatus: privacyStatus || "public",
+        videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      },
+    });
 
     return res.status(200).json({
       success: true,

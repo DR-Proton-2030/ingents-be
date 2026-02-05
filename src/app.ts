@@ -21,6 +21,8 @@ import httpLoggerMiddleware from "./api/v1/middlewares/ipTracker/httpLogger.midd
 import waitListRouter from "./api/v1/routes/waitlist/waitList.routes";
 import meetingRouter from "./api/v1/routes/meeting/meeting.routes";
 import projectRouter from "./api/v1/routes/project/project.routes";
+import schedulerRouter from "./api/v1/routes/scheduler/scheduler.routes";
+import { initializeWorker } from "./services/scheduler/scheduler.service";
 
 const app = express();
 
@@ -71,6 +73,18 @@ app.use("/api/v1/task-tags", tagRouter);
 app.use("/api/v1/waitlist", waitListRouter);
 app.use("/api/v1/meetings", meetingRouter);
 app.use("/api/v1/projects", projectRouter);
+app.use("/api/v1/scheduler", schedulerRouter);
+
+// Initialize BullMQ Worker for Social Media Scheduler (async, non-blocking)
+initializeWorker()
+  .then((worker) => {
+    if (worker) {
+      console.log("\x1b[32m \x1b[1m[BullMQ] Social Media Scheduler Worker initialized\x1b[0m");
+    }
+  })
+  .catch((error) => {
+    console.warn("\x1b[33m[BullMQ] Scheduler initialization skipped\x1b[0m");
+  });
 
 // Default route for health check
 app.get("/", (req, res) => {
