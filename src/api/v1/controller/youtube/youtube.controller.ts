@@ -114,6 +114,77 @@ export const youtubeCallback = async (req: Request, res: Response) => {
   }
 };
 
+export const disconnectYoutube = async (req: Request, res: Response) => {
+  try {
+    const userId =
+      (req.body?.userId as string) ||
+      (req.body?.user_id as string) ||
+      (req.query?.userId as string) ||
+      (req.query?.user_id as string);
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    const user = await UserModel.findById(userId).exec();
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const tokenToRevoke = user.youtube?.access_token;
+
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          "youtube.project_id": null,
+          "youtube.name": null,
+          "youtube.access_token": null,
+        },
+      },
+      { new: true },
+    ).exec();
+
+    if (tokenToRevoke) {
+      try {
+        await axios.post(
+          "https://oauth2.googleapis.com/revoke",
+          new URLSearchParams({ token: tokenToRevoke }),
+          {
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+          },
+        );
+      } catch (revokeErr: any) {
+        console.warn(
+          "Failed to revoke YouTube token:",
+          revokeErr?.response?.data || revokeErr?.message || revokeErr,
+        );
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "YouTube disconnected successfully",
+      user: updatedUser,
+    });
+  } catch (error: any) {
+    console.error("Error disconnecting YouTube:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to disconnect YouTube",
+      error: error.message,
+    });
+  }
+};
+
 export const getYoutubeChannelDetails = async (req: Request, res: Response) => {
   try {
     const accessToken = req.headers.authorization?.split(" ")[1];
@@ -255,6 +326,7 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
     const videoId = uploadResponse.data.id;
 
     let thumbnailResult: any = null;
+    let thumbnailError: string | null = null;
     if (videoId && typeof thumbnailDataUrl === "string" && thumbnailDataUrl.startsWith("data:")) {
       try {
         const match = thumbnailDataUrl.match(/^data:(.+);base64,(.+)$/);
@@ -270,7 +342,12 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
           },
         });
       } catch (thumbErr: any) {
-        console.warn("Failed to set YouTube thumbnail:", thumbErr?.message || thumbErr);
+        thumbnailError =
+          thumbErr?.response?.data?.error?.message ||
+          thumbErr?.errors?.[0]?.message ||
+          thumbErr?.message ||
+          String(thumbErr);
+        console.warn("Failed to set YouTube thumbnail:", thumbnailError);
       }
     }
 
@@ -289,6 +366,8 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
           tags,
           videoId,
           privacyStatus: status.privacyStatus,
+          thumbnailSet: Boolean(thumbnailResult),
+          thumbnailError,
         },
       });
 
@@ -301,6 +380,8 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
           scheduledAt: publishAtISO,
           privacyStatus: status.privacyStatus,
           videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+          thumbnailSet: Boolean(thumbnailResult),
+          thumbnailError,
         },
         message: "Video scheduled for publishing",
       });
@@ -323,6 +404,7 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
         videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
         thumbnailSet: Boolean(thumbnailResult),
         thumbnail: thumbnailResult?.data,
+        thumbnailError,
       },
     });
 
@@ -332,6 +414,7 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
       videoId,
       videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
       thumbnailSet: Boolean(thumbnailResult),
+      thumbnailError,
     });
   } catch (error: any) {
     console.error("Error uploading video:", error);

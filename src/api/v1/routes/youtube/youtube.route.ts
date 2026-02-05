@@ -2,6 +2,7 @@ import express from "express";
 import {
   youtubeAuth,
   youtubeCallback,
+  disconnectYoutube,
   getYoutubeChannelDetails,
   uploadYoutubeVideo,
   getAllYoutubeVideos,
@@ -22,6 +23,7 @@ const youtubeRouter = express.Router();
 youtubeRouter.get("/auth", youtubeAuth);
 youtubeRouter.get("/callback", youtubeCallback);
 youtubeRouter.get("/get-channel", getYoutubeChannelDetails);
+youtubeRouter.post("/disconnect", disconnectYoutube);
 youtubeRouter.post("/upload-video", uploadYoutubeVideo);
 
 // Videos
