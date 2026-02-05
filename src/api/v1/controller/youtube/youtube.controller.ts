@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { google, youtube_v3 } from "googleapis";
+import { Readable } from "stream";
 import { config } from "dotenv";
 import UserModel from "../../../../models/users/users.model";
 import PostedContentModel from "../../../../models/postedContent/postedContent.model";
@@ -165,8 +166,15 @@ export const getYoutubeChannelDetails = async (req: Request, res: Response) => {
 // Upload video
 export const uploadYoutubeVideo = async (req: Request, res: Response) => {
   try {
-    const { user_id, title, description, tags, privacyStatus, videoURL } =
-      req.body;
+    const {
+      user_id,
+      title,
+      description,
+      tags,
+      privacyStatus,
+      videoURL,
+      thumbnailDataUrl,
+    } = req.body;
     const { iso: publishAtISO, error: scheduleError } = resolveYouTubePublishAt(
       req.body,
     );
@@ -246,6 +254,26 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
 
     const videoId = uploadResponse.data.id;
 
+    let thumbnailResult: any = null;
+    if (videoId && typeof thumbnailDataUrl === "string" && thumbnailDataUrl.startsWith("data:")) {
+      try {
+        const match = thumbnailDataUrl.match(/^data:(.+);base64,(.+)$/);
+        if (!match) {
+          throw new Error("Invalid thumbnailDataUrl format");
+        }
+        const base64 = match[2];
+        const buffer = Buffer.from(base64, "base64");
+        thumbnailResult = await youtube.thumbnails.set({
+          videoId,
+          media: {
+            body: Readable.from(buffer),
+          },
+        });
+      } catch (thumbErr: any) {
+        console.warn("Failed to set YouTube thumbnail:", thumbErr?.message || thumbErr);
+      }
+    }
+
     if (publishAtISO) {
       // Save scheduled video to database
       await ScheduledPostModel.create({
@@ -293,6 +321,8 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
         tags,
         privacyStatus: privacyStatus || "public",
         videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        thumbnailSet: Boolean(thumbnailResult),
+        thumbnail: thumbnailResult?.data,
       },
     });
 
@@ -301,6 +331,7 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
       message: "Video uploaded successfully",
       videoId,
       videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+      thumbnailSet: Boolean(thumbnailResult),
     });
   } catch (error: any) {
     console.error("Error uploading video:", error);

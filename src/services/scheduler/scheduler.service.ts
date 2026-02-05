@@ -281,6 +281,7 @@ export const processPostJob = async (job: Job<SocialMediaJobData>): Promise<any>
           videoUrl: mediaUrls?.[0] || "",
           tags: hashtags,
           privacyStatus: platformSpecificData?.privacyStatus || "public",
+          thumbnailDataUrl: platformSpecificData?.thumbnailDataUrl,
         });
         platformPostId = platformResponse?.id;
         break;

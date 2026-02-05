@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import UserModel from "../../models/users/users.model";
 import { getAuthorizedClient } from "./youtube.service";
+import { Readable } from "stream";
 
 export interface PostToYoutubeParams {
   userId: string;
@@ -10,6 +11,7 @@ export interface PostToYoutubeParams {
   tags?: string[];
   privacyStatus?: "public" | "private" | "unlisted";
   categoryId?: string;
+  thumbnailDataUrl?: string;
 }
 
 /**
@@ -23,6 +25,7 @@ export const postToYoutube = async ({
   tags,
   privacyStatus = "public",
   categoryId = "22", // Default to "People & Blogs"
+  thumbnailDataUrl,
 }: PostToYoutubeParams) => {
   // Get user and access token
   const user = await UserModel.findById(userId).exec();
@@ -60,6 +63,22 @@ export const postToYoutube = async ({
       body: videoResponse.data,
     },
   });
+
+  const videoId = response.data.id;
+  if (videoId && typeof thumbnailDataUrl === "string" && thumbnailDataUrl.startsWith("data:")) {
+    try {
+      const match = thumbnailDataUrl.match(/^data:(.+);base64,(.+)$/);
+      if (match) {
+        const buffer = Buffer.from(match[2], "base64");
+        await youtube.thumbnails.set({
+          videoId,
+          media: { body: Readable.from(buffer) },
+        });
+      }
+    } catch (err: any) {
+      console.warn("Failed to set YouTube thumbnail (scheduler):", err?.message || err);
+    }
+  }
 
   return response.data;
 };
