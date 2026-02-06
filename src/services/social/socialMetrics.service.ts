@@ -206,7 +206,15 @@ export async function fetchSocialMetrics(userId: string): Promise<{
       }
 
       if (profile) {
-        const followers = Number(profile?.public_metrics?.followers_count || 0);
+        const followersRaw = profile?.public_metrics?.followers_count;
+        if (followersRaw == null) {
+          errors.push({
+            platform: "x",
+            message:
+              "Followers count unavailable from X API (check app access and scopes)",
+          });
+        }
+        const followers = followersRaw != null ? Number(followersRaw) : 0;
         items.push({ platform: "x", metric: "followers", count: followers });
       }
     } else {

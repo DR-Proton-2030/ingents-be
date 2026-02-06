@@ -111,14 +111,19 @@ export const xRefreshToken = async (req: Request, res: Response) => {
 export const getXProfile = async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization || "";
-    let token = authHeader.startsWith("Bearer ")
-      ? authHeader.split("Bearer ")[1]
-      : undefined;
-
     const { user_id } = req.query as { user_id?: string };
-    if (!token && user_id) {
+
+    // Prefer stored user token when user_id is provided to ensure User Context
+    let token: string | undefined = undefined;
+    let refreshToken: string | undefined = undefined;
+    if (user_id) {
       const user = await UserModel.findById(user_id);
-      token = user?.x?.access_token;
+      token = user?.x?.access_token || undefined;
+      refreshToken = user?.x?.refresh_token || undefined;
+    } else {
+      token = authHeader.startsWith("Bearer ")
+        ? authHeader.split("Bearer ")[1]
+        : undefined;
     }
 
     if (!token) {
@@ -127,8 +132,42 @@ export const getXProfile = async (req: Request, res: Response) => {
         .json({ success: false, message: "Missing X bearer token" });
     }
 
-    const profile = await getXUserProfile(token);
-    return res.status(200).json({ success: true, result: profile });
+    try {
+      const profile = await getXUserProfile(token);
+      return res.status(200).json({ success: true, result: profile });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail || err?.message;
+      // If token is expired and we have a refresh, attempt refresh
+      if (status === 401 && user_id && refreshToken) {
+        try {
+          const tokens = await refreshXToken(user_id);
+          const profile = await getXUserProfile(tokens.access_token);
+          return res.status(200).json({ success: true, result: profile });
+        } catch (refreshErr: any) {
+          return res.status(401).json({
+            success: false,
+            message: "Invalid or expired X token",
+            error:
+              refreshErr?.response?.data || refreshErr?.message || refreshErr,
+          });
+        }
+      }
+      // Unsupported auth typically means Application-Only token was used
+      if (status === 403) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "Unsupported authentication: use OAuth 2.0 User Context token",
+          error: err?.response?.data || detail,
+        });
+      }
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch X profile",
+        error: err?.response?.data || detail,
+      });
+    }
   } catch (error: any) {
     console.error(
       "X get profile error:",
@@ -254,32 +293,69 @@ export const postXUniversal = async (req: Request, res: Response) => {
 
 export const getXAllDetails = async (req: Request, res: Response) => {
   try {
+    // Accept either Authorization header or infer from user_id
     const authHeader = req.headers.authorization || "";
-    const bearerToken = authHeader.startsWith("Bearer ")
+    let bearerToken = authHeader.startsWith("Bearer ")
       ? authHeader.split("Bearer ")[1]
       : undefined;
-    const { handle } = req.query as { handle?: string };
+    const { handle, user_id } = req.query as {
+      handle?: string;
+      user_id?: string;
+    };
+
+    // Try to resolve token and preferred identifiers from DB
+    let preferredHandle: string | undefined = handle;
+    let preferredUserId: string | undefined = undefined;
+    if (user_id) {
+      const userDoc = await UserModel.findById(user_id).exec();
+      if (!userDoc) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
+      }
+      bearerToken = bearerToken || userDoc.x?.access_token || undefined;
+      preferredHandle = preferredHandle || userDoc.x?.name || undefined;
+      // "project_id" may store X user id in this app design
+      preferredUserId = userDoc.x?.project_id || undefined;
+    }
 
     if (!bearerToken) {
       return res
         .status(401)
         .json({ success: false, message: "Missing X bearer token" });
     }
-    if (!handle) {
-      return res
-        .status(400)
-        .json({ success: false, message: "handle is required" });
-    }
 
     const headers = { Authorization: `Bearer ${bearerToken}` };
 
-    // 1) Resolve user by handle
-    const userResp = await axios.get(
-      `${TWITTER_API_BASE}/users/by/username/${encodeURIComponent(handle)}?user.fields=profile_image_url,public_metrics,description,location,created_at,url,verified`,
-      { headers },
-    );
-    const user = userResp.data.data;
-    if (!user?.id) {
+    // 1) Resolve X user by id or handle or fallback to /users/me
+    let xUser: any | undefined;
+    if (preferredUserId) {
+      const byIdResp = await axios
+        .get(
+          `${TWITTER_API_BASE}/users/${encodeURIComponent(preferredUserId)}?user.fields=profile_image_url,public_metrics,description,location,created_at,url,verified`,
+          { headers },
+        )
+        .catch(() => undefined);
+      xUser = byIdResp?.data?.data;
+    }
+    if (!xUser && preferredHandle) {
+      const byHandleResp = await axios
+        .get(
+          `${TWITTER_API_BASE}/users/by/username/${encodeURIComponent(preferredHandle)}?user.fields=profile_image_url,public_metrics,description,location,created_at,url,verified`,
+          { headers },
+        )
+        .catch(() => undefined);
+      xUser = byHandleResp?.data?.data;
+    }
+    if (!xUser) {
+      // last resort: use authenticated user
+      try {
+        xUser = await getXUserProfile(bearerToken);
+      } catch (_) {
+        // ignore
+      }
+    }
+    if (!xUser?.id) {
       return res
         .status(404)
         .json({ success: false, message: "X user not found" });
@@ -288,7 +364,7 @@ export const getXAllDetails = async (req: Request, res: Response) => {
     // 2) Recent tweets with media expansions
     const tweetsResp = await axios
       .get(
-        `${TWITTER_API_BASE}/users/${user.id}/tweets?max_results=20&tweet.fields=created_at,public_metrics,possibly_sensitive,referenced_tweets,entities,attachments&expansions=attachments.media_keys,author_id,referenced_tweets.id&media.fields=type,url,preview_image_url`,
+        `${TWITTER_API_BASE}/users/${xUser.id}/tweets?max_results=20&tweet.fields=created_at,public_metrics,possibly_sensitive,referenced_tweets,entities,attachments&expansions=attachments.media_keys,author_id,referenced_tweets.id&media.fields=type,url,preview_image_url`,
         { headers },
       )
       .catch(() => ({ data: { data: [], includes: { media: [] } } }));
@@ -325,7 +401,7 @@ export const getXAllDetails = async (req: Request, res: Response) => {
         id: t.id,
         message: t.text,
         created_time: t.created_at,
-        permalink_url: `https://x.com/${handle}/status/${t.id}`,
+        permalink_url: `https://x.com/${preferredHandle || xUser.username || xUser.name || "user"}/status/${t.id}`,
         full_picture:
           mediaKeys.length > 0 && mediaIndex[mediaKeys[0]]?.url
             ? mediaIndex[mediaKeys[0]].url
@@ -356,17 +432,20 @@ export const getXAllDetails = async (req: Request, res: Response) => {
 
     const result = {
       page: {
-        id: user.id,
-        title: user.name,
-        handle: handle,
-        description: user.description,
-        link: `https://x.com/${handle}`,
-        picture: user.profile_image_url,
-        fan_count: user.public_metrics?.followers_count,
+        id: xUser.id,
+        title: xUser.name,
+        handle: preferredHandle || xUser.username || undefined,
+        description: xUser.description,
+        link:
+          preferredHandle || xUser.username
+            ? `https://x.com/${preferredHandle || xUser.username}`
+            : undefined,
+        picture: xUser.profile_image_url,
+        fan_count: xUser.public_metrics?.followers_count,
         cover: undefined,
         category: undefined,
-        location: user.location,
-        verified: user.verified,
+        location: xUser.location,
+        verified: xUser.verified,
       },
       demographics: {
         topLocations: [],

@@ -124,7 +124,7 @@ export const refreshXToken = async (userId: string) => {
 
 export const getXUserProfile = async (accessToken: string) => {
   const { data } = await axios.get(
-    "https://api.twitter.com/2/users/me?user.fields=profile_image_url,public_metrics,description,location,created_at,url,verified,username",
+    "https://api.twitter.com/2/users/me?user.fields=profile_image_url,public_metrics,description,location,created_at,url,verified",
     {
       headers: { Authorization: `Bearer ${accessToken}` },
     },
