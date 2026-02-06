@@ -22,6 +22,7 @@ import waitListRouter from "./api/v1/routes/waitlist/waitList.routes";
 import meetingRouter from "./api/v1/routes/meeting/meeting.routes";
 import projectRouter from "./api/v1/routes/project/project.routes";
 import schedulerRouter from "./api/v1/routes/scheduler/scheduler.routes";
+import socialRouter from "./api/v1/routes/social/social.route";
 import { initializeWorker } from "./services/scheduler/scheduler.service";
 
 const app = express();
@@ -74,12 +75,15 @@ app.use("/api/v1/waitlist", waitListRouter);
 app.use("/api/v1/meetings", meetingRouter);
 app.use("/api/v1/projects", projectRouter);
 app.use("/api/v1/scheduler", schedulerRouter);
+app.use("/api/v1/social", socialRouter);
 
 // Initialize BullMQ Worker for Social Media Scheduler (async, non-blocking)
 initializeWorker()
   .then((worker) => {
     if (worker) {
-      console.log("\x1b[32m \x1b[1m[BullMQ] Social Media Scheduler Worker initialized\x1b[0m");
+      console.log(
+        "\x1b[32m \x1b[1m[BullMQ] Social Media Scheduler Worker initialized\x1b[0m",
+      );
     }
   })
   .catch((error) => {
