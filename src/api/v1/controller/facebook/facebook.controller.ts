@@ -596,3 +596,69 @@ export const getFacebookAllDetails = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const disconnectFacebook = async (req: Request, res: Response) => {
+  try {
+    const userId =
+      (req.body?.userId as string) ||
+      (req.body?.user_id as string) ||
+      (req.query?.userId as string) ||
+      (req.query?.user_id as string);
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    const user = await UserModel.findById(userId).exec();
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const tokenToRevoke = user.facebook?.access_token;
+
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          "facebook.project_id": null,
+          "facebook.name": null,
+          "facebook.access_token": null,
+        },
+      },
+      { new: true },
+    ).exec();
+
+    if (tokenToRevoke) {
+      try {
+        // Revoke app permissions for the user
+        await axios.delete(`${FACEBOOK_GRAPH_URL}/me/permissions`, {
+          headers: { Authorization: `Bearer ${tokenToRevoke}` },
+        });
+      } catch (revokeErr: any) {
+        console.warn(
+          "Failed to revoke Facebook token:",
+          revokeErr?.response?.data || revokeErr?.message || revokeErr,
+        );
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Facebook disconnected successfully",
+      user: updatedUser,
+    });
+  } catch (error: any) {
+    console.error("Error disconnecting Facebook:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to disconnect Facebook",
+      error: error.message,
+    });
+  }
+};

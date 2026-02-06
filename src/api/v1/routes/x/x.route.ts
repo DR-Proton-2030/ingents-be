@@ -7,6 +7,7 @@ import {
   xRefreshToken,
   getXProfile,
   postXUniversal,
+  disconnectX,
 } from "../../controller/x/x.controller";
 
 const router = express.Router();
@@ -33,5 +34,8 @@ router.post(
   ]),
   postXUniversal,
 );
+
+// Disconnect X (Twitter)
+router.post("/disconnect", disconnectX);
 
 export default router;

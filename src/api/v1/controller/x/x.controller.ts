@@ -10,6 +10,7 @@ import UserModel from "../../../../models/users/users.model";
 import { uploadFileToS3Service } from "../../../../services/uploadFile/uploadFile";
 
 const TWITTER_API_BASE = "https://api.twitter.com/2";
+const TWITTER_OAUTH_REVOKE = "https://api.twitter.com/2/oauth2/revoke";
 
 export const xLogin = async (req: Request, res: Response) => {
   try {
@@ -394,6 +395,106 @@ export const getXAllDetails = async (req: Request, res: Response) => {
       success: false,
       message: "Failed to fetch X details",
       error: error.response?.data || error.message,
+    });
+  }
+};
+
+export const disconnectX = async (req: Request, res: Response) => {
+  try {
+    const userId =
+      (req.body?.userId as string) ||
+      (req.body?.user_id as string) ||
+      (req.query?.userId as string) ||
+      (req.query?.user_id as string);
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    const user = await UserModel.findById(userId).exec();
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const accessToken = user.x?.access_token || undefined;
+    const refreshToken = user.x?.refresh_token || undefined;
+
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          "x.project_id": null,
+          "x.name": null,
+          "x.access_token": null,
+          "x.refresh_token": null,
+          "x.pkce_verifier": null,
+        },
+      },
+      { new: true },
+    ).exec();
+
+    const clientId = process.env.X_CLIENT_ID;
+    if (clientId) {
+      const headers = { "Content-Type": "application/x-www-form-urlencoded" };
+      // Try revoking refresh token first
+      if (refreshToken) {
+        try {
+          await axios.post(
+            TWITTER_OAUTH_REVOKE,
+            new URLSearchParams({
+              token: refreshToken,
+              client_id: clientId,
+              token_type_hint: "refresh_token",
+            }),
+            { headers },
+          );
+        } catch (revErr: any) {
+          console.warn(
+            "Failed to revoke X refresh token:",
+            revErr?.response?.data || revErr?.message || revErr,
+          );
+        }
+      }
+      // Then attempt revoking access token
+      if (accessToken) {
+        try {
+          await axios.post(
+            TWITTER_OAUTH_REVOKE,
+            new URLSearchParams({
+              token: accessToken,
+              client_id: clientId,
+              token_type_hint: "access_token",
+            }),
+            { headers },
+          );
+        } catch (revErr: any) {
+          console.warn(
+            "Failed to revoke X access token:",
+            revErr?.response?.data || revErr?.message || revErr,
+          );
+        }
+      }
+    } else {
+      console.warn("X_CLIENT_ID missing; skipping token revocation.");
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "X disconnected successfully",
+      user: updatedUser,
+    });
+  } catch (error: any) {
+    console.error("Error disconnecting X:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to disconnect X",
+      error: error.message,
     });
   }
 };

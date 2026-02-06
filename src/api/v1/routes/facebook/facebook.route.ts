@@ -7,6 +7,7 @@ import {
   getAccessTokenLongTerm,
   postFacebookUniversal,
   getFacebookAllDetails,
+  disconnectFacebook,
 } from "../../controller/facebook/facebook.controller";
 
 const router = express.Router();
@@ -36,5 +37,8 @@ router.post(
 
 //  Aggregated Page Details
 router.get("/page/get-all-details", getFacebookAllDetails);
+
+// Disconnect Facebook
+router.post("/disconnect", disconnectFacebook);
 
 export default router;
