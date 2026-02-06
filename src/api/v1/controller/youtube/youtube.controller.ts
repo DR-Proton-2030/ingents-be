@@ -24,14 +24,14 @@ const oauth2Client = new google.auth.OAuth2(
 
 export const youtubeAuth = (req: Request, res: Response) => {
   const appUserId = req.query.user_id as string;
-  
+
   if (!appUserId) {
     return res.status(400).json({
       success: false,
       message: "user_id is required",
     });
   }
-  
+
   const scopes = [
     "https://www.googleapis.com/auth/youtube",
     "https://www.googleapis.com/auth/youtube.readonly",
@@ -55,25 +55,29 @@ export const youtubeAuth = (req: Request, res: Response) => {
 export const youtubeCallback = async (req: Request, res: Response) => {
   const { code, state } = req.query;
   console.log("Code and state <=======>", code, state);
-  
+
   if (!state || typeof state !== "string") {
     return res.status(400).json({
       success: false,
       message: "State parameter is missing",
     });
   }
-  
+
   const user_id = atob(state);
   console.log("<======> user id : ", user_id);
-  
+
   // Validate user_id is a valid ObjectId (24 hex characters)
-  if (!user_id || user_id === "undefined" || !/^[a-fA-F0-9]{24}$/.test(user_id)) {
+  if (
+    !user_id ||
+    user_id === "undefined" ||
+    !/^[a-fA-F0-9]{24}$/.test(user_id)
+  ) {
     return res.status(400).json({
       success: false,
       message: "Invalid user_id in state parameter",
     });
   }
-  
+
   if (!code || typeof code !== "string") {
     return res.status(400).json({
       success: false,
@@ -325,7 +329,10 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
         snippet: {
           title: title || "Untitled Video",
           description: description || "",
-          tags: typeof tags === "string" ? tags.split(",").map(t => t.trim()) : (tags || []),
+          tags:
+            typeof tags === "string"
+              ? tags.split(",").map((t) => t.trim())
+              : tags || [],
         },
         status,
       },
@@ -338,7 +345,11 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
 
     let thumbnailResult: any = null;
     let thumbnailError: string | null = null;
-    if (videoId && typeof thumbnailDataUrl === "string" && thumbnailDataUrl.startsWith("data:")) {
+    if (
+      videoId &&
+      typeof thumbnailDataUrl === "string" &&
+      thumbnailDataUrl.startsWith("data:")
+    ) {
       try {
         const match = thumbnailDataUrl.match(/^data:(.+);base64,(.+)$/);
         if (!match) {
@@ -504,6 +515,11 @@ export const getAllYoutubeVideos = async (req: Request, res: Response) => {
       publishedAt?: string | null;
       thumbnails?: any;
       channelId?: string | null;
+      // Enriched fields
+      statistics?: youtube_v3.Schema$VideoStatistics | null;
+      duration?: string | null;
+      privacyStatus?: string | null;
+      tags?: string[] | null;
     }> = [];
 
     let pageToken: string | undefined = undefined;
@@ -528,11 +544,51 @@ export const getAllYoutubeVideos = async (req: Request, res: Response) => {
             null,
           thumbnails: item.snippet?.thumbnails,
           channelId: item.snippet?.channelId || null,
+          statistics: null,
+          duration: null,
+          privacyStatus: null,
+          tags: null,
         });
       }
 
       pageToken = data.nextPageToken || undefined;
     } while (pageToken);
+
+    // Enrich with video details: statistics, contentDetails, status
+    const videoIds = allVideos
+      .map((v) => v.id)
+      .filter((id): id is string => !!id);
+    const chunk = <T>(arr: T[], size: number) => {
+      const out: T[][] = [];
+      for (let i = 0; i < arr.length; i += size)
+        out.push(arr.slice(i, i + size));
+      return out;
+    };
+    const idChunks = chunk(videoIds, 50);
+    const detailsMap: Record<string, youtube_v3.Schema$Video> = {};
+    for (const ids of idChunks) {
+      const detailsResp = await youtube.videos.list({
+        part: ["snippet", "statistics", "contentDetails", "status"],
+        id: ids,
+      });
+      const details = (detailsResp.data.items ||
+        []) as youtube_v3.Schema$Video[];
+      for (const d of details) {
+        if (d.id) detailsMap[d.id] = d;
+      }
+    }
+    // Merge back into allVideos
+    for (const v of allVideos) {
+      const id = v.id || "";
+      const d = id ? detailsMap[id] : undefined;
+      if (d) {
+        v.statistics = d.statistics || null;
+        v.duration = d.contentDetails?.duration || null;
+        v.privacyStatus = d.status?.privacyStatus || null;
+        // Prefer tags from detailed snippet if present
+        v.tags = (d.snippet?.tags as string[] | undefined) || v.tags || null;
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -1095,9 +1151,12 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
     const uploadsPlaylistId =
       channelData.contentDetails?.relatedPlaylists?.uploads;
 
-    // 2. Dates for Analytics (Last 30 days)
+    // 2. Dates for Analytics (configurable via ?days=)
     const endDate = new Date().toISOString().split("T")[0];
-    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const daysParam = Number((req.query as any).days) || 30;
+    const safeDays =
+      Number.isFinite(daysParam) && daysParam > 0 ? daysParam : 30;
+    const startDate = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000)
       .toISOString()
       .split("T")[0];
 
@@ -1112,6 +1171,23 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       growthReport,
       ageReport,
       genderReport,
+      overviewReport,
+      trafficSourceReport,
+      deviceTypeReport,
+      topVideosReport,
+      productReport,
+      osReport,
+      subscribedStatusReport,
+      searchTermsReport,
+      externalSitesReport,
+      reachDailyReport,
+      provincesUSReport,
+      provincesCAReport,
+      revenueOverviewReport,
+      revenueByDayReport,
+      revenueByCountryReport,
+      revenueTopVideosReport,
+      retentionDailyReport,
     ] = await Promise.all([
       uploadsPlaylistId
         ? youtube.playlistItems.list({
@@ -1172,7 +1248,7 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
           ids: `channel==${channelId}`,
           startDate,
           endDate,
-          metrics: "views",
+          metrics: "viewerPercentage",
           dimensions: "ageGroup",
           sort: "ageGroup",
         })
@@ -1185,12 +1261,197 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
           ids: `channel==${channelId}`,
           startDate,
           endDate,
-          metrics: "views",
+          metrics: "viewerPercentage",
           dimensions: "gender",
           sort: "gender",
         })
         .catch((e) => {
           console.error("Analytics Error (Gender):", e.message);
+          return null;
+        }),
+      // Overview totals similar to Studio summary
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics:
+            "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,subscribersLost",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Overview):", e.message);
+          return null;
+        }),
+      // Traffic sources breakdown
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "insightTrafficSourceType",
+          sort: "-views",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Traffic Sources):", e.message);
+          return null;
+        }),
+      // Device type breakdown
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "deviceType",
+          sort: "-views",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Device Types):", e.message);
+          return null;
+        }),
+      // Top videos
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics:
+            "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage",
+          dimensions: "video",
+          sort: "-views",
+          maxResults: 10,
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Top Videos):", e.message);
+          return null;
+        }),
+      // YouTube products (watch page, channel, embedded)
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "insightPlaybackLocationType",
+          sort: "-views",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Products):", e.message);
+          return null;
+        }),
+      // Operating systems
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "operatingSystem",
+          sort: "-views",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (OS):", e.message);
+          return null;
+        }),
+      // Subscribed vs unsubscribed viewers
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "subscribedStatus",
+          sort: "-views",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Subscribed Status):", e.message);
+          return null;
+        }),
+      // Top search terms (trafficSourceDetail requires filter for YT_SEARCH)
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "insightTrafficSourceDetail",
+          filters: "insightTrafficSourceType==YT_SEARCH",
+          sort: "-views",
+          maxResults: 15,
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Search Terms):", e.message);
+          return null;
+        }),
+      // Top external sites (trafficSourceDetail for EXT_URL)
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "insightTrafficSourceDetail",
+          filters: "insightTrafficSourceType==EXT_URL",
+          sort: "-views",
+          maxResults: 15,
+        })
+        .catch((e) => {
+          console.error("Analytics Error (External Sites):", e.message);
+          return null;
+        }),
+      // Reach: daily impressions & CTR
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "day",
+          sort: "day",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Reach Daily):", e.message);
+          return null;
+        }),
+      // Geography: provinces (US)
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "views,estimatedMinutesWatched,averageViewDuration",
+          dimensions: "province",
+          filters: "country==US",
+          sort: "-views",
+          maxResults: 10,
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Provinces US):", e.message);
+          return null;
+        }),
+      // Geography: provinces (CA)
+      Promise.resolve({ data: { rows: [] } } as any),
+      // Revenue overview
+      Promise.resolve({ data: { rows: [] } } as any),
+      // Revenue by day
+      Promise.resolve({ data: { rows: [] } } as any),
+      // Revenue by country
+      Promise.resolve({ data: { rows: [] } } as any),
+      // Revenue top videos
+      Promise.resolve({ data: { rows: [] } } as any),
+      // Retention daily (proxies)
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate,
+          endDate,
+          metrics: "averageViewDuration,averageViewPercentage,views",
+          dimensions: "day",
+          sort: "day",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Retention Daily):", e.message);
           return null;
         }),
     ]);
@@ -1207,6 +1468,22 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       });
       statsResp.data.items?.forEach((v) => {
         if (v.id) videoStatsMap[v.id] = v;
+      });
+    }
+
+    // Fetch extra metadata for Top Videos from analytics
+    const topVideoIds: string[] = ((topVideosReport?.data as any)?.rows || [])
+      .map((row: any[]) => row?.[0])
+      .filter((id: any): id is string => typeof id === "string" && !!id);
+
+    let topVideoStatsMap: Record<string, any> = {};
+    if (topVideoIds.length > 0) {
+      const topVideoStatsResp = await youtube.videos.list({
+        part: ["snippet", "statistics", "contentDetails", "status"],
+        id: topVideoIds,
+      });
+      topVideoStatsResp.data.items?.forEach((v) => {
+        if (v.id) topVideoStatsMap[v.id] = v;
       });
     }
 
@@ -1310,6 +1587,241 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
         replyCount: thread.snippet?.totalReplyCount,
       })),
       postSchedule,
+      analytics: {
+        overview: (() => {
+          const rows = (overviewReport?.data as any)?.rows || [];
+          const totals = rows[0] || [];
+          const [
+            views,
+            minutes,
+            avgViewDuration,
+            avgViewPercentage,
+            subsGained,
+            subsLost,
+          ] = totals;
+          return {
+            views: Number(views || 0),
+            watchTimeMinutes: Number(minutes || 0),
+            averageViewDuration: Number(avgViewDuration || 0),
+            averageViewPercentage: Number(avgViewPercentage || 0),
+            impressions: 0,
+            impressionsCtr: 0,
+            subscribersGained: Number(subsGained || 0),
+            subscribersLost: Number(subsLost || 0),
+            netSubscribers: Number((subsGained || 0) - (subsLost || 0)),
+          };
+        })(),
+        dailyTrend:
+          (growthReport?.data as any)?.rows?.map((row: any[]) => ({
+            date: row[0],
+            views: Number(row[1] || 0),
+            subscribersGained: Number(row[2] || 0),
+          })) || [],
+        trafficSources:
+          (trafficSourceReport?.data as any)?.rows?.map((row: any[]) => ({
+            source: row[0],
+            views: Number(row[1] || 0),
+            watchTimeMinutes: Number(row[2] || 0),
+            impressions: 0,
+            impressionsCtr: 0,
+          })) || [],
+        devices:
+          (deviceTypeReport?.data as any)?.rows?.map((row: any[]) => ({
+            deviceType: row[0],
+            views: Number(row[1] || 0),
+            watchTimeMinutes: Number(row[2] || 0),
+          })) || [],
+        topVideos:
+          (topVideosReport?.data as any)?.rows?.map((row: any[]) => {
+            const videoId = row[0];
+            const meta = topVideoStatsMap[videoId] || {};
+            return {
+              videoId,
+              views: Number(row[1] || 0),
+              watchTimeMinutes: Number(row[2] || 0),
+              averageViewDuration: Number(row[3] || 0),
+              averageViewPercentage: Number(row[4] || 0),
+              title: meta.snippet?.title,
+              thumbnails: meta.snippet?.thumbnails,
+              duration: meta.contentDetails?.duration,
+              privacyStatus: meta.status?.privacyStatus,
+              publishedAt: meta.snippet?.publishedAt,
+              statistics: meta.statistics,
+              url: videoId
+                ? `https://www.youtube.com/watch?v=${videoId}`
+                : undefined,
+            };
+          }) || [],
+        products:
+          (productReport?.data as any)?.rows?.map((row: any[]) => ({
+            product: row[0],
+            views: Number(row[1] || 0),
+            watchTimeMinutes: Number(row[2] || 0),
+            impressions: 0,
+            impressionsCtr: 0,
+          })) || [],
+        operatingSystems:
+          (osReport?.data as any)?.rows?.map((row: any[]) => ({
+            os: row[0],
+            views: Number(row[1] || 0),
+            watchTimeMinutes: Number(row[2] || 0),
+          })) || [],
+        subscribedStatus:
+          (subscribedStatusReport?.data as any)?.rows?.map((row: any[]) => ({
+            status: row[0],
+            views: Number(row[1] || 0),
+            watchTimeMinutes: Number(row[2] || 0),
+          })) || [],
+        topSearchTerms:
+          (searchTermsReport?.data as any)?.rows?.map((row: any[]) => ({
+            term: row[0],
+            views: Number(row[1] || 0),
+            watchTimeMinutes: Number(row[2] || 0),
+          })) || [],
+        topExternalSites:
+          (externalSitesReport?.data as any)?.rows?.map((row: any[]) => ({
+            site: row[0],
+            views: Number(row[1] || 0),
+            watchTimeMinutes: Number(row[2] || 0),
+          })) || [],
+        // New sections
+        reach: {
+          overview: (() => {
+            const rows = (overviewReport?.data as any)?.rows || [];
+            const totals = rows[0] || [];
+            const [views] = totals;
+            return {
+              impressions: 0,
+              impressionsCtr: 0,
+              views: Number(views || 0),
+            };
+          })(),
+          daily:
+            (reachDailyReport?.data as any)?.rows?.map((row: any[]) => ({
+              date: row[0],
+              impressions: 0,
+              impressionsCtr: 0,
+              views: Number(row[1] || 0),
+            })) || [],
+          bySource:
+            (trafficSourceReport?.data as any)?.rows?.map((row: any[]) => ({
+              source: row[0],
+              impressions: 0,
+              impressionsCtr: 0,
+              views: Number(row[1] || 0),
+            })) || [],
+        },
+        audience: {
+          ageRange:
+            (ageReport?.data as any)?.rows?.map((row: any[]) => ({
+              ageGroup: row[0],
+              views: Number(row[1] || 0),
+            })) || [],
+          gender:
+            (genderReport?.data as any)?.rows?.map((row: any[]) => ({
+              gender: row[0],
+              views: Number(row[1] || 0),
+            })) || [],
+          subscribedStatus:
+            (subscribedStatusReport?.data as any)?.rows?.map((row: any[]) => ({
+              status: row[0],
+              views: Number(row[1] || 0),
+              watchTimeMinutes: Number(row[2] || 0),
+            })) || [],
+          devices:
+            (deviceTypeReport?.data as any)?.rows?.map((row: any[]) => ({
+              deviceType: row[0],
+              views: Number(row[1] || 0),
+              watchTimeMinutes: Number(row[2] || 0),
+            })) || [],
+          operatingSystems:
+            (osReport?.data as any)?.rows?.map((row: any[]) => ({
+              os: row[0],
+              views: Number(row[1] || 0),
+              watchTimeMinutes: Number(row[2] || 0),
+            })) || [],
+        },
+        geography: {
+          countries:
+            (analyticsReport?.data as any)?.rows?.map((row: any[]) => ({
+              country: row[0],
+              views: Number(row[1] || 0),
+              watchTimeMinutes: Number(row[2] || 0),
+              averageViewDuration: Number(row[3] || 0),
+            })) || [],
+          provincesUS:
+            (provincesUSReport?.data as any)?.rows?.map((row: any[]) => ({
+              province: row[0],
+              views: Number(row[1] || 0),
+              watchTimeMinutes: Number(row[2] || 0),
+              averageViewDuration: Number(row[3] || 0),
+            })) || [],
+          provincesCA:
+            (provincesCAReport?.data as any)?.rows?.map((row: any[]) => ({
+              province: row[0],
+              views: Number(row[1] || 0),
+              watchTimeMinutes: Number(row[2] || 0),
+              averageViewDuration: Number(row[3] || 0),
+            })) || [],
+        },
+        retention: {
+          averages: (() => {
+            const rows = (overviewReport?.data as any)?.rows || [];
+            const totals = rows[0] || [];
+            const [, , avgViewDuration, avgViewPercentage] = totals;
+            return {
+              averageViewDuration: Number(avgViewDuration || 0),
+              averageViewPercentage: Number(avgViewPercentage || 0),
+            };
+          })(),
+          daily:
+            (retentionDailyReport?.data as any)?.rows?.map((row: any[]) => ({
+              date: row[0],
+              averageViewDuration: Number(row[1] || 0),
+              averageViewPercentage: Number(row[2] || 0),
+              views: Number(row[3] || 0),
+            })) || [],
+          topVideos:
+            (topVideosReport?.data as any)?.rows?.map((row: any[]) => ({
+              videoId: row[0],
+              averageViewDuration: Number(row[3] || 0),
+              averageViewPercentage: Number(row[4] || 0),
+            })) || [],
+        },
+        revenue: {
+          overview: (() => {
+            const rows = (revenueOverviewReport?.data as any)?.rows || [];
+            const totals = rows[0] || [];
+            const [estimatedRevenue, adImpressions, monetizedPlaybacks, cpm] =
+              totals;
+            return {
+              estimatedRevenue: Number(estimatedRevenue || 0),
+              adImpressions: Number(adImpressions || 0),
+              monetizedPlaybacks: Number(monetizedPlaybacks || 0),
+              playbackBasedCpm: Number(cpm || 0),
+            };
+          })(),
+          byDay:
+            (revenueByDayReport?.data as any)?.rows?.map((row: any[]) => ({
+              date: row[0],
+              estimatedRevenue: Number(row[1] || 0),
+              adImpressions: Number(row[2] || 0),
+              monetizedPlaybacks: Number(row[3] || 0),
+              playbackBasedCpm: Number(row[4] || 0),
+            })) || [],
+          byCountry:
+            (revenueByCountryReport?.data as any)?.rows?.map((row: any[]) => ({
+              country: row[0],
+              estimatedRevenue: Number(row[1] || 0),
+            })) || [],
+          topVideos:
+            (revenueTopVideosReport?.data as any)?.rows?.map((row: any[]) => ({
+              videoId: row[0],
+              estimatedRevenue: Number(row[1] || 0),
+              monetizedPlaybacks: Number(row[2] || 0),
+            })) || [],
+        },
+      },
     };
 
     return res.status(200).json({ success: true, result });
