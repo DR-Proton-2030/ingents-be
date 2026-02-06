@@ -18,13 +18,15 @@ import {
   deleteYoutubeVideo,
 } from "../../controller/youtube/youtube.controller";
 
+import { upload } from "../../middlewares/helper/multer/multer.middleware";
+
 const youtubeRouter = express.Router();
 
 youtubeRouter.get("/auth", youtubeAuth);
 youtubeRouter.get("/callback", youtubeCallback);
 youtubeRouter.get("/get-channel", getYoutubeChannelDetails);
 youtubeRouter.post("/disconnect", disconnectYoutube);
-youtubeRouter.post("/upload-video", uploadYoutubeVideo);
+youtubeRouter.post("/upload-video", upload.single("video"), uploadYoutubeVideo);
 
 // Videos
 youtubeRouter.post("/videos", getAllYoutubeVideos);

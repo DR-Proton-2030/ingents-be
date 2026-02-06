@@ -256,10 +256,10 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
         message: "User id required",
       });
     }
-    if (!videoURL) {
+    if (!videoURL && !req.file) {
       return res.status(400).json({
         success: false,
-        message: "No video URL provided",
+        message: "No video source provided (file or URL)",
       });
     }
 
@@ -292,7 +292,18 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
 
     const youtube = google.youtube({ version: "v3", auth: oauth2Client });
 
-    const response = await axios.get(videoURL, { responseType: "stream" });
+    let videoStream: any;
+    if (req.file) {
+      videoStream = Readable.from(req.file.buffer);
+    } else if (videoURL) {
+      const response = await axios.get(videoURL, { responseType: "stream" });
+      videoStream = response.data;
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "No video source provided (file or URL)",
+      });
+    }
 
     // Upload video to YouTube
     if (scheduleError) {
@@ -314,12 +325,12 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
         snippet: {
           title: title || "Untitled Video",
           description: description || "",
-          tags: tags || [],
+          tags: typeof tags === "string" ? tags.split(",").map(t => t.trim()) : (tags || []),
         },
         status,
       },
       media: {
-        body: response.data,
+        body: videoStream,
       },
     });
 
@@ -357,7 +368,7 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
         user_id,
         platform: "youtube",
         content: title || "Untitled Video",
-        media_urls: [videoURL],
+        media_urls: [videoURL || `https://www.youtube.com/watch?v=${videoId}`],
         media_type: "video",
         scheduled_at: new Date(publishAtISO),
         status: "completed",
@@ -392,7 +403,7 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
       user_id,
       platform: "youtube",
       content: title || "Untitled Video",
-      media_urls: [videoURL],
+      media_urls: [videoURL || `https://www.youtube.com/watch?v=${videoId}`],
       posted_at: new Date(),
       platform_post_id: videoId,
       is_scheduled: false,
