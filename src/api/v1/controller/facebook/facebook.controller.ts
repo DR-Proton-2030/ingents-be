@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { Types } from "mongoose";
 import {
   getFacebookAuthURL,
   getFacebookUser,
@@ -11,6 +12,7 @@ import axios from "axios";
 import FormData from "form-data";
 import { uploadFileToS3Service } from "../../../../services/uploadFile/uploadFile";
 import UserModel from "../../../../models/users/users.model";
+import PostedContentModel from "../../../../models/postedContent/postedContent.model";
 const FACEBOOK_GRAPH_URL = "https://graph.facebook.com/v20.0";
 
 export const facebookLogin = (req: Request, res: Response) => {
@@ -178,6 +180,22 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
         `${FACEBOOK_GRAPH_URL}/${id}/feed`,
         payload,
       );
+
+      // Save to history if not scheduled (scheduled posts are handled by the scheduler service)
+      if (!scheduledPublishTime) {
+        await PostedContentModel.create({
+          user_id: userId,
+          platform: "facebook",
+          content: message,
+          posted_at: new Date(),
+          platform_post_id: postRes.data.id,
+          is_scheduled: false,
+          status: "published",
+          page_id: pageId,
+          media_type: "text",
+        });
+      }
+
       if (scheduledPublishTime) {
         // Fetch more details for the scheduled post
         const detailsRes = await axios.get(
@@ -245,6 +263,23 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
         `${FACEBOOK_GRAPH_URL}/${id}/photos`,
         imgPayload,
       );
+
+      // Save to history if not scheduled
+      if (!scheduledPublishTime) {
+        await PostedContentModel.create({
+          user_id: userId,
+          platform: "facebook",
+          content: message || "",
+          media_urls: [finalImageUrl],
+          media_type: "image",
+          posted_at: new Date(),
+          platform_post_id: imgRes.data.id,
+          is_scheduled: false,
+          status: "published",
+          page_id: pageId,
+        });
+      }
+
       if (scheduledPublishTime) {
         try {
           // Do not request 'scheduled_publish_time' on Photo node to avoid errors
@@ -323,6 +358,23 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
       const resp = await axios.post(uploadUrl, vidPayload, {
         headers: { Authorization: `Bearer ${pageAccessToken}` },
       });
+
+      // Save to history if not scheduled
+      if (!scheduledPublishTime) {
+        await PostedContentModel.create({
+          user_id: userId,
+          platform: "facebook",
+          content: message || "",
+          media_urls: [finalVideoUrl],
+          media_type: "video",
+          posted_at: new Date(),
+          platform_post_id: resp.data.id,
+          is_scheduled: false,
+          status: "published",
+          page_id: pageId,
+        });
+      }
+
       if (scheduledPublishTime) {
         const detailsUrl = `https://graph-video.facebook.com/v19.0/${resp.data.id}?fields=id,permalink_url,scheduled_publish_time,title,description,created_time,thumbnails{uri},is_published`;
         const detailsRes = await axios.get(detailsUrl, {

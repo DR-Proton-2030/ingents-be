@@ -1,5 +1,6 @@
 import axios from "axios";
 import { Request, Response } from "express";
+import { Types } from "mongoose";
 import {
   getXAuthURL,
   exchangeCodeForTokens,
@@ -7,6 +8,7 @@ import {
   getXUserProfile,
 } from "../../../../services/x/x.service";
 import UserModel from "../../../../models/users/users.model";
+import PostedContentModel from "../../../../models/postedContent/postedContent.model";
 import { uploadFileToS3Service } from "../../../../services/uploadFile/uploadFile";
 
 const TWITTER_API_BASE = "https://api.twitter.com/2";
@@ -233,6 +235,20 @@ export const postXUniversal = async (req: Request, res: Response) => {
       { text },
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
+
+    // Save to history
+    await PostedContentModel.create({
+      user_id: new Types.ObjectId(userId),
+      platform: "x",
+      content: message || text,
+      media_urls: [finalImageUrl, finalVideoUrl].filter(Boolean),
+      media_type: finalVideoUrl ? "video" : finalImageUrl ? "image" : "text",
+      posted_at: new Date(),
+      platform_post_id: resp.data?.data?.id,
+      is_scheduled: false,
+      status: "published",
+      hashtags: Array.isArray(hashtags) ? hashtags : (hashtags as string)?.split(/[\s,]+/).filter(Boolean) || [],
+    });
 
     return res.status(200).json({
       success: true,

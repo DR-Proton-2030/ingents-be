@@ -8,6 +8,7 @@ import {
   publishInstagramMedia,
 } from "../../../../services/instagram/instagram.service";
 import UserModel from "../../../../models/users/users.model";
+import PostedContentModel from "../../../../models/postedContent/postedContent.model";
 
 export const instagrmaLogin = (req: Request, res: Response) => {
   const { user_id } = req.query;
@@ -80,7 +81,7 @@ export const fetchInstagramProfileController = async (
 
 export const publishInstagramPost = async (req: Request, res: Response) => {
   try {
-    const { access_token, igUserId, image_url, caption } = req.body;
+    const { access_token, igUserId, image_url, caption, userId } = req.body;
 
     if (!access_token || !igUserId || !image_url) {
       return res
@@ -100,6 +101,21 @@ export const publishInstagramPost = async (req: Request, res: Response) => {
       igUserId,
       containerId: container.id,
     });
+
+    // Save to history
+    if (userId) {
+      await PostedContentModel.create({
+        user_id: userId,
+        platform: "instagram",
+        content: caption || "",
+        media_urls: [image_url],
+        media_type: "image",
+        posted_at: new Date(),
+        platform_post_id: published.id,
+        is_scheduled: false,
+        status: "published",
+      });
+    }
 
     res.status(200).json({
       success: true,
