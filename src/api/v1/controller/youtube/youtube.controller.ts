@@ -10,6 +10,48 @@ import {
   getAuthorizedClient,
   resolveYouTubePublishAt,
 } from "../../../../services/youtube/youtube.service";
+import { fetchChannelInfo } from "../../../../services/youtube/data/channel";
+import {
+  getCustomWindow,
+  getTodayStr,
+  getLast48hStartStr,
+  getLast28dStartStr,
+} from "../../../../services/youtube/utils/dates";
+import { paginateUploads } from "../../../../services/youtube/data/uploads";
+import {
+  fetchVideoStatsMap,
+  fetchMetaForVideos,
+} from "../../../../services/youtube/data/videos";
+import { isoToSeconds } from "../../../../services/youtube/utils/iso";
+import { safeRows, firstRow } from "../../../../services/youtube/utils/rows";
+import {
+  getTopCountries,
+  getProvincesUS,
+  getProvincesCAEmpty,
+} from "../../../../services/youtube/analytics/geography";
+import {
+  getGrowth,
+  getOverview,
+} from "../../../../services/youtube/analytics/overview";
+import {
+  getAgeReport,
+  getGenderReport,
+  getDeviceTypes,
+  getOperatingSystems,
+  getSubscribedStatus,
+} from "../../../../services/youtube/analytics/audience";
+import {
+  getTrafficSources,
+  getTrafficSourcesDetailSearch,
+  getTrafficSourcesDetailExternal,
+} from "../../../../services/youtube/analytics/traffic";
+import { getProducts } from "../../../../services/youtube/analytics/products";
+import { getRetentionDaily } from "../../../../services/youtube/analytics/retention";
+import { getReachDaily } from "../../../../services/youtube/analytics/reach";
+import {
+  getTopContent,
+  getTopVideosWithRetention,
+} from "../../../../services/youtube/analytics/content";
 config();
 
 const YT_CLIENT_ID = process.env.YT_CLIENT_ID!;
@@ -1134,48 +1176,60 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       user.youtube.access_token,
     );
 
-    // 1. Get channel info
-    const channelResp = await youtube.channels.list({
-      part: ["snippet", "statistics", "contentDetails", "brandingSettings"],
-      mine: true,
-    });
-
-    if (!channelResp.data.items?.length) {
-      return res
-        .status(404)
-        .json({ success: false, message: "No channel found" });
-    }
-
-    const channelData = channelResp.data.items[0];
-    const channelId = channelData.id!;
-    const uploadsPlaylistId =
-      channelData.contentDetails?.relatedPlaylists?.uploads;
+    // 1. Channel info (thin controller)
+    const { channelData, channelId, uploadsPlaylistId } =
+      await fetchChannelInfo(youtube);
 
     // 2. Dates for Analytics (configurable via ?days=)
-    const endDate = new Date().toISOString().split("T")[0];
+    // Date utilities
     const daysParam = Number((req.query as any).days) || 30;
-    const safeDays =
-      Number.isFinite(daysParam) && daysParam > 0 ? daysParam : 30;
-    const startDate = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0];
-
-    // Additional fixed windows for dashboard use-cases
-    const todayStr = new Date().toISOString().split("T")[0];
-    const last48hStartStr = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0];
-    const last28dStartStr = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0];
+    const { start: startDate, end: endDate } = getCustomWindow(daysParam);
+    const todayStr = getTodayStr();
+    const last48hStartStr = getLast48hStartStr();
+    const last28dStartStr = getLast28dStartStr();
 
     // 3. Parallel fetching of various data points
+    // 3. YouTube Data API calls
     const [
       videosResp,
       subscriptionsResp,
       activitiesResp,
       playlistsResp,
       commentsResp,
+    ] = await Promise.all([
+      uploadsPlaylistId
+        ? youtube.playlistItems.list({
+            part: ["snippet", "contentDetails"],
+            playlistId: uploadsPlaylistId,
+            maxResults: 15,
+          })
+        : Promise.resolve({ data: { items: [] } }),
+      youtube.subscriptions.list({
+        part: ["snippet", "subscriberSnippet"],
+        myRecentSubscribers: true,
+        maxResults: 10,
+      }),
+      youtube.activities.list({
+        part: ["snippet", "contentDetails"],
+        mine: true,
+        maxResults: 10, // More for classification
+      }),
+      youtube.playlists.list({
+        part: ["snippet", "contentDetails", "status"],
+        mine: true,
+        maxResults: 10,
+      }),
+      youtube.commentThreads.list({
+        part: ["snippet", "replies"],
+        allThreadsRelatedToChannelId: channelId,
+        maxResults: 10,
+      }),
+    ]);
+
+    // 4. YouTube Analytics API calls (grouped by domain)
+    // Analytics helpers imported statically at top
+
+    const [
       analyticsReport,
       growthReport,
       ageReport,
@@ -1197,398 +1251,76 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       revenueByCountryReport,
       revenueTopVideosReport,
       retentionDailyReport,
-      // Dashboard additions (supported identifiers only)
+    ] = await Promise.all([
+      getTopCountries(analytics, channelId, startDate, endDate, 5),
+      getGrowth(analytics, channelId, startDate, endDate),
+      getAgeReport(analytics, channelId, startDate, endDate),
+      getGenderReport(analytics, channelId, startDate, endDate),
+      getOverview(analytics, channelId, startDate, endDate),
+      getTrafficSources(analytics, channelId, startDate, endDate),
+      getDeviceTypes(analytics, channelId, startDate, endDate),
+      getTopVideosWithRetention(analytics, channelId, startDate, endDate, 10),
+      getProducts(analytics, channelId, startDate, endDate),
+      getOperatingSystems(analytics, channelId, startDate, endDate),
+      getSubscribedStatus(analytics, channelId, startDate, endDate),
+      getTrafficSourcesDetailSearch(
+        analytics,
+        channelId,
+        startDate,
+        endDate,
+        15,
+      ),
+      getTrafficSourcesDetailExternal(
+        analytics,
+        channelId,
+        startDate,
+        endDate,
+        15,
+      ),
+      getReachDaily(analytics, channelId, startDate, endDate),
+      getProvincesUS(analytics, channelId, startDate, endDate, 10),
+      getProvincesCAEmpty(),
+      Promise.resolve({ data: { rows: [] } } as any),
+      Promise.resolve({ data: { rows: [] } } as any),
+      Promise.resolve({ data: { rows: [] } } as any),
+      Promise.resolve({ data: { rows: [] } } as any),
+      getRetentionDaily(analytics, channelId, startDate, endDate),
+    ]);
+
+    // Dashboard additions (supported identifiers only)
+    const [
       topContent48hReport,
       overview28dReport,
       topContent28dReport,
       subscribedStatus28dReport,
       trafficSources28dReport,
     ] = await Promise.all([
-      uploadsPlaylistId
-        ? youtube.playlistItems.list({
-            part: ["snippet", "contentDetails"],
-            playlistId: uploadsPlaylistId,
-            maxResults: 15,
-          })
-        : Promise.resolve({ data: { items: [] } }),
-      youtube.subscriptions.list({
-        part: ["snippet", "subscriberSnippet"],
-        myRecentSubscribers: true,
-        maxResults: 10,
-      }),
-      youtube.activities.list({
-        part: ["snippet", "contentDetails"],
-        mine: true,
-        maxResults: 50, // More for classification
-      }),
-      youtube.playlists.list({
-        part: ["snippet", "contentDetails", "status"],
-        mine: true,
-        maxResults: 10,
-      }),
-      youtube.commentThreads.list({
-        part: ["snippet", "replies"],
-        allThreadsRelatedToChannelId: channelId,
-        maxResults: 10,
-      }),
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,estimatedMinutesWatched,averageViewDuration",
-          dimensions: "country",
-          sort: "-views",
-          maxResults: 5,
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Locations):", e.message);
-          return null;
-        }),
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,subscribersGained",
-          dimensions: "day",
-          sort: "day",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Growth):", e.message);
-          return null;
-        }),
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "viewerPercentage",
-          dimensions: "ageGroup",
-          sort: "ageGroup",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Age):", e.message);
-          return null;
-        }),
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "viewerPercentage",
-          dimensions: "gender",
-          sort: "gender",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Gender):", e.message);
-          return null;
-        }),
-      // Overview totals similar to Studio summary
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics:
-            "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,subscribersGained,subscribersLost",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Overview):", e.message);
-          return null;
-        }),
-      // Traffic sources breakdown
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "insightTrafficSourceType",
-          sort: "-views",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Traffic Sources):", e.message);
-          return null;
-        }),
-      // Device type breakdown
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "deviceType",
-          sort: "-views",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Device Types):", e.message);
-          return null;
-        }),
-      // Top videos
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics:
-            "views,estimatedMinutesWatched,averageViewDuration,averageViewPercentage",
-          dimensions: "video",
-          sort: "-views",
-          maxResults: 10,
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Top Videos):", e.message);
-          return null;
-        }),
-      // YouTube products (watch page, channel, embedded)
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "insightPlaybackLocationType",
-          sort: "-views",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Products):", e.message);
-          return null;
-        }),
-      // Operating systems
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "operatingSystem",
-          sort: "-views",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (OS):", e.message);
-          return null;
-        }),
-      // Subscribed vs unsubscribed viewers
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "subscribedStatus",
-          sort: "-views",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Subscribed Status):", e.message);
-          return null;
-        }),
-      // Top search terms (trafficSourceDetail requires filter for YT_SEARCH)
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "insightTrafficSourceDetail",
-          filters: "insightTrafficSourceType==YT_SEARCH",
-          sort: "-views",
-          maxResults: 15,
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Search Terms):", e.message);
-          return null;
-        }),
-      // Top external sites (trafficSourceDetail for EXT_URL)
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "insightTrafficSourceDetail",
-          filters: "insightTrafficSourceType==EXT_URL",
-          sort: "-views",
-          maxResults: 15,
-        })
-        .catch((e) => {
-          console.error("Analytics Error (External Sites):", e.message);
-          return null;
-        }),
-      // Reach: daily impressions & CTR
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "day",
-          sort: "day",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Reach Daily):", e.message);
-          return null;
-        }),
-      // Geography: provinces (US)
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "views,estimatedMinutesWatched,averageViewDuration",
-          dimensions: "province",
-          filters: "country==US",
-          sort: "-views",
-          maxResults: 10,
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Provinces US):", e.message);
-          return null;
-        }),
-      // Geography: provinces (CA)
-      Promise.resolve({ data: { rows: [] } } as any),
-      // Revenue overview
-      Promise.resolve({ data: { rows: [] } } as any),
-      // Revenue by day
-      Promise.resolve({ data: { rows: [] } } as any),
-      // Revenue by country
-      Promise.resolve({ data: { rows: [] } } as any),
-      // Revenue top videos
-      Promise.resolve({ data: { rows: [] } } as any),
-      // Retention daily (proxies)
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate,
-          endDate,
-          metrics: "averageViewDuration,averageViewPercentage,views",
-          dimensions: "day",
-          sort: "day",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Retention Daily):", e.message);
-          return null;
-        }),
-      // Top content in last 48 hours (dimensions: video; metrics: views, estimatedMinutesWatched)
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate: last48hStartStr,
-          endDate: todayStr,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "video",
-          sort: "-views",
-          maxResults: 10,
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Top Content 48h):", e.message);
-          return null;
-        }),
-      // Overview (28 days) totals
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate: last28dStartStr,
-          endDate: todayStr,
-          metrics:
-            "views,estimatedMinutesWatched,subscribersGained,subscribersLost",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Overview 28d):", e.message);
-          return null;
-        }),
-      // Top content (28 days)
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate: last28dStartStr,
-          endDate: todayStr,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "video",
-          sort: "-views",
-          maxResults: 10,
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Top Content 28d):", e.message);
-          return null;
-        }),
-      // Viewer type breakdown (approx): SUBSCRIBED vs NOT_SUBSCRIBED over 28 days
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate: last28dStartStr,
-          endDate: todayStr,
-          metrics: "views,estimatedMinutesWatched",
-          dimensions: "subscribedStatus",
-          sort: "-views",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Subscribed Status 28d):", e.message);
-          return null;
-        }),
-      // Traffic sources (28 days) - percentages computed in backend
-      analytics.reports
-        .query({
-          ids: `channel==${channelId}`,
-          startDate: last28dStartStr,
-          endDate: todayStr,
-          metrics: "views",
-          dimensions: "insightTrafficSourceType",
-          sort: "-views",
-        })
-        .catch((e) => {
-          console.error("Analytics Error (Traffic Sources 28d):", e.message);
-          return null;
-        }),
+      getTopContent(analytics, channelId, last48hStartStr, todayStr, 10),
+      getOverview(analytics, channelId, last28dStartStr, todayStr),
+      getTopContent(analytics, channelId, last28dStartStr, todayStr, 10),
+      getSubscribedStatus(analytics, channelId, last28dStartStr, todayStr),
+      getTrafficSources(analytics, channelId, last28dStartStr, todayStr),
     ]);
 
     // Fetch ALL uploads via pagination for accurate counts
-    const allUploadItems: any[] = [...((videosResp.data.items as any[]) || [])];
-    if (uploadsPlaylistId) {
-      let nextPageToken: string | undefined = (videosResp.data as any)
-        ?.nextPageToken;
-      while (nextPageToken) {
-        const resp = await youtube.playlistItems.list({
-          part: ["snippet", "contentDetails"],
-          playlistId: uploadsPlaylistId,
-          maxResults: 50,
-          pageToken: nextPageToken,
-        });
-        allUploadItems.push(...((resp.data.items as any[]) || []));
-        nextPageToken = (resp.data as any)?.nextPageToken || undefined;
-      }
-    }
+    const allUploadItems: any[] = await paginateUploads(
+      youtube,
+      uploadsPlaylistId || null,
+      videosResp,
+    );
 
     // 4. Video Stats Classification
     const videoIds = (allUploadItems || [])
       .map((v) => v.contentDetails?.videoId)
       .filter((id): id is string => !!id);
-    let videoStatsMap: Record<string, any> = {};
-    if (videoIds.length > 0) {
-      const statsResp = await youtube.videos.list({
-        part: ["snippet", "statistics", "contentDetails", "status"],
-        id: videoIds,
-      });
-      statsResp.data.items?.forEach((v) => {
-        if (v.id) videoStatsMap[v.id] = v;
-      });
-    }
+    const videoStatsMap = await fetchVideoStatsMap(youtube, videoIds);
 
     // Fetch extra metadata for Top Videos from analytics
     const topVideoIds: string[] = ((topVideosReport?.data as any)?.rows || [])
       .map((row: any[]) => row?.[0])
       .filter((id: any): id is string => typeof id === "string" && !!id);
 
-    let topVideoStatsMap: Record<string, any> = {};
-    if (topVideoIds.length > 0) {
-      const topVideoStatsResp = await youtube.videos.list({
-        part: ["snippet", "statistics", "contentDetails", "status"],
-        id: topVideoIds,
-      });
-      topVideoStatsResp.data.items?.forEach((v) => {
-        if (v.id) topVideoStatsMap[v.id] = v;
-      });
-    }
+    const topVideoStatsMap = await fetchMetaForVideos(youtube, topVideoIds);
 
     // Classification counts: derive Shorts vs Videos using duration from videoStatsMap
     let shortsCount = 0;
@@ -1600,15 +1332,7 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       if (act.snippet?.type === "liveStream") liveCount++;
     });
 
-    const isoToSeconds = (iso?: string): number => {
-      if (!iso || typeof iso !== "string") return 0;
-      const m = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
-      if (!m) return 0;
-      const h = Number(m[1] || 0);
-      const min = Number(m[2] || 0);
-      const s = Number(m[3] || 0);
-      return h * 3600 + min * 60 + s;
-    };
+    // isoToSeconds imported statically at top
 
     Object.values(videoStatsMap).forEach((v: any) => {
       const sec = isoToSeconds(v?.contentDetails?.duration);
@@ -1977,8 +1701,8 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
     );
 
     // 2) Overview Tab (Last 28 Days)
-    const overview28Rows = (overview28dReport?.data as any)?.rows || [];
-    const [ovViews, ovMinutes, ovSubsG, ovSubsL] = overview28Rows[0] || [];
+    const overview28Rows = safeRows(overview28dReport);
+    const [ovViews, ovMinutes, ovSubsG, ovSubsL] = firstRow(overview28dReport);
     const top28Ids = ((topContent28dReport?.data as any)?.rows || [])
       .map((r: any[]) => r[0])
       .filter((id: any): id is string => typeof id === "string" && !!id);
@@ -2069,7 +1793,7 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       "CHANNEL_PAGES",
       "DIRECT_OR_UNKNOWN",
     ]);
-    const tsRows = (trafficSources28dReport?.data as any)?.rows || [];
+    const tsRows = safeRows(trafficSources28dReport);
     const filteredTS = tsRows.filter((r: any[]) => allowedSources.has(r[0]));
     const totalTSViews = filteredTS.reduce(
       (sum: number, r: any[]) => sum + Number(r[1] || 0),
