@@ -1160,6 +1160,15 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       .toISOString()
       .split("T")[0];
 
+    // Additional fixed windows for dashboard use-cases
+    const todayStr = new Date().toISOString().split("T")[0];
+    const last48hStartStr = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+    const last28dStartStr = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
     // 3. Parallel fetching of various data points
     const [
       videosResp,
@@ -1188,6 +1197,12 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       revenueByCountryReport,
       revenueTopVideosReport,
       retentionDailyReport,
+      // Dashboard additions (supported identifiers only)
+      topContent48hReport,
+      overview28dReport,
+      topContent28dReport,
+      subscribedStatus28dReport,
+      trafficSources28dReport,
     ] = await Promise.all([
       uploadsPlaylistId
         ? youtube.playlistItems.list({
@@ -1454,10 +1469,98 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
           console.error("Analytics Error (Retention Daily):", e.message);
           return null;
         }),
+      // Top content in last 48 hours (dimensions: video; metrics: views, estimatedMinutesWatched)
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate: last48hStartStr,
+          endDate: todayStr,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "video",
+          sort: "-views",
+          maxResults: 10,
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Top Content 48h):", e.message);
+          return null;
+        }),
+      // Overview (28 days) totals
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate: last28dStartStr,
+          endDate: todayStr,
+          metrics:
+            "views,estimatedMinutesWatched,subscribersGained,subscribersLost",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Overview 28d):", e.message);
+          return null;
+        }),
+      // Top content (28 days)
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate: last28dStartStr,
+          endDate: todayStr,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "video",
+          sort: "-views",
+          maxResults: 10,
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Top Content 28d):", e.message);
+          return null;
+        }),
+      // Viewer type breakdown (approx): SUBSCRIBED vs NOT_SUBSCRIBED over 28 days
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate: last28dStartStr,
+          endDate: todayStr,
+          metrics: "views,estimatedMinutesWatched",
+          dimensions: "subscribedStatus",
+          sort: "-views",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Subscribed Status 28d):", e.message);
+          return null;
+        }),
+      // Traffic sources (28 days) - percentages computed in backend
+      analytics.reports
+        .query({
+          ids: `channel==${channelId}`,
+          startDate: last28dStartStr,
+          endDate: todayStr,
+          metrics: "views",
+          dimensions: "insightTrafficSourceType",
+          sort: "-views",
+        })
+        .catch((e) => {
+          console.error("Analytics Error (Traffic Sources 28d):", e.message);
+          return null;
+        }),
     ]);
 
+    // Fetch ALL uploads via pagination for accurate counts
+    const allUploadItems: any[] = [...((videosResp.data.items as any[]) || [])];
+    if (uploadsPlaylistId) {
+      let nextPageToken: string | undefined = (videosResp.data as any)
+        ?.nextPageToken;
+      while (nextPageToken) {
+        const resp = await youtube.playlistItems.list({
+          part: ["snippet", "contentDetails"],
+          playlistId: uploadsPlaylistId,
+          maxResults: 50,
+          pageToken: nextPageToken,
+        });
+        allUploadItems.push(...((resp.data.items as any[]) || []));
+        nextPageToken = (resp.data as any)?.nextPageToken || undefined;
+      }
+    }
+
     // 4. Video Stats Classification
-    const videoIds = (videosResp.data.items || [])
+    const videoIds = (allUploadItems || [])
       .map((v) => v.contentDetails?.videoId)
       .filter((id): id is string => !!id);
     let videoStatsMap: Record<string, any> = {};
@@ -1487,15 +1590,32 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       });
     }
 
-    // Classification counts from activities
+    // Classification counts: derive Shorts vs Videos using duration from videoStatsMap
     let shortsCount = 0;
     let videosCount = 0;
     let liveCount = 0;
 
+    // Keep live count from activities
     (activitiesResp.data.items || []).forEach((act: any) => {
-      if (act.snippet?.type === "upload") videosCount++;
       if (act.snippet?.type === "liveStream") liveCount++;
-      // Simplified: Duration < 60s is Short. We can check actual counts from stats mapping if we had more.
+    });
+
+    const isoToSeconds = (iso?: string): number => {
+      if (!iso || typeof iso !== "string") return 0;
+      const m = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+      if (!m) return 0;
+      const h = Number(m[1] || 0);
+      const min = Number(m[2] || 0);
+      const s = Number(m[3] || 0);
+      return h * 3600 + min * 60 + s;
+    };
+
+    Object.values(videoStatsMap).forEach((v: any) => {
+      const sec = isoToSeconds(v?.contentDetails?.duration);
+      if (sec > 0) {
+        if (sec < 60) shortsCount++;
+        else videosCount++;
+      }
     });
 
     // Build Post Schedule from videos that have a future status.publishAt
@@ -1544,8 +1664,8 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
           })) || [],
       },
       postActivity: {
-        shorts: shortsCount, // Note: Accurate count would need more API logic
-        videos: parseInt(channelData.statistics?.videoCount || "0"),
+        shorts: shortsCount,
+        videos: videosCount,
         lives: liveCount,
         growthTrend:
           (growthReport?.data as any)?.rows?.map((row: any[]) => ({
@@ -1554,7 +1674,7 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
             subscribersGained: row[2],
           })) || [],
       },
-      recentVideos: (videosResp.data.items || []).map((item: any) => {
+      recentVideos: (allUploadItems || []).map((item: any) => {
         const vId = item.contentDetails?.videoId;
         const stats = videoStatsMap[vId] || {};
         return {
@@ -1822,6 +1942,188 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
             })) || [],
         },
       },
+    };
+
+    // Build Dashboard sections (frontend-friendly)
+    // Note: We only use supported metrics/dimensions; impressions/CTR are unavailable.
+    // 1) Top Content (Last 48 Hours)
+    const top48Ids = ((topContent48hReport?.data as any)?.rows || [])
+      .map((r: any[]) => r[0])
+      .filter((id: any): id is string => typeof id === "string" && !!id);
+    let top48MetaMap: Record<string, any> = {};
+    if (top48Ids.length > 0) {
+      const resp = await youtube.videos.list({
+        part: ["snippet", "contentDetails"],
+        id: top48Ids,
+      });
+      resp.data.items?.forEach((v) => {
+        if (v.id) top48MetaMap[v.id] = v;
+      });
+    }
+    const topContent48h = ((topContent48hReport?.data as any)?.rows || []).map(
+      (row: any[]) => {
+        const videoId = row[0];
+        const meta = top48MetaMap[videoId] || {};
+        return {
+          videoId,
+          views: Number(row[1] || 0),
+          watchTimeMinutes: Number(row[2] || 0),
+          // Enriched via Data API
+          title: meta.snippet?.title,
+          thumbnails: meta.snippet?.thumbnails,
+          duration: meta.contentDetails?.duration,
+        };
+      },
+    );
+
+    // 2) Overview Tab (Last 28 Days)
+    const overview28Rows = (overview28dReport?.data as any)?.rows || [];
+    const [ovViews, ovMinutes, ovSubsG, ovSubsL] = overview28Rows[0] || [];
+    const top28Ids = ((topContent28dReport?.data as any)?.rows || [])
+      .map((r: any[]) => r[0])
+      .filter((id: any): id is string => typeof id === "string" && !!id);
+    let top28MetaMap: Record<string, any> = {};
+    if (top28Ids.length > 0) {
+      const resp = await youtube.videos.list({
+        part: ["snippet", "contentDetails"],
+        id: top28Ids,
+      });
+      resp.data.items?.forEach((v) => {
+        if (v.id) top28MetaMap[v.id] = v;
+      });
+    }
+    const topContent28d = ((topContent28dReport?.data as any)?.rows || []).map(
+      (row: any[]) => {
+        const videoId = row[0];
+        const meta = top28MetaMap[videoId] || {};
+        return {
+          videoId,
+          views: Number(row[1] || 0),
+          watchTimeMinutes: Number(row[2] || 0),
+          title: meta.snippet?.title,
+          thumbnails: meta.snippet?.thumbnails,
+          duration: meta.contentDetails?.duration,
+        };
+      },
+    );
+
+    // 3) Content Tab (published content + viewer type breakdown)
+    const last28dStart = new Date(last28dStartStr).getTime();
+    const contentPublished = (allUploadItems || [])
+      .filter((item: any) => {
+        const publishedAt =
+          item.contentDetails?.videoPublishedAt || item.snippet?.publishedAt;
+        return publishedAt && new Date(publishedAt).getTime() >= last28dStart;
+      })
+      .map((item: any) => {
+        const vId = item.contentDetails?.videoId;
+        const stats = (videoStatsMap as any)[vId] || {};
+        return {
+          id: vId,
+          title: item.snippet?.title,
+          thumbnails: item.snippet?.thumbnails,
+          publishedAt:
+            item.contentDetails?.videoPublishedAt || item.snippet?.publishedAt,
+          duration: stats.contentDetails?.duration,
+          views: Number(stats.statistics?.viewCount || 0),
+        };
+      });
+    const viewerRows = (subscribedStatus28dReport?.data as any)?.rows || [];
+    const viewerBreakdown = {
+      // Approximation: NOT_SUBSCRIBED as new viewers; SUBSCRIBED as regular viewers
+      approximationUsed: true,
+      newViewersApprox: {
+        views: Number(
+          (viewerRows.find((r: any[]) => r[0] === "NOT_SUBSCRIBED") || [])[1] ||
+            0,
+        ),
+        watchTimeMinutes: Number(
+          (viewerRows.find((r: any[]) => r[0] === "NOT_SUBSCRIBED") || [])[2] ||
+            0,
+        ),
+      },
+      regularViewersApprox: {
+        views: Number(
+          (viewerRows.find((r: any[]) => r[0] === "SUBSCRIBED") || [])[1] || 0,
+        ),
+        watchTimeMinutes: Number(
+          (viewerRows.find((r: any[]) => r[0] === "SUBSCRIBED") || [])[2] || 0,
+        ),
+      },
+    };
+
+    // 4) Content Performance (Impressions Flow)
+    const impressionsFlow = {
+      // The YouTube Analytics API v2 does NOT provide impressions or CTR.
+      impressionsUnavailable: true,
+      impressions: 0,
+      ctr: 0,
+      watchTimeFromImpressions: 0,
+    };
+
+    // 5) Traffic Sources (percentages) - supported identifiers only
+    const allowedSources = new Set([
+      "YT_SEARCH",
+      "BROWSE_FEATURES",
+      "SUGGESTED_VIDEO",
+      "CHANNEL_PAGES",
+      "DIRECT_OR_UNKNOWN",
+    ]);
+    const tsRows = (trafficSources28dReport?.data as any)?.rows || [];
+    const filteredTS = tsRows.filter((r: any[]) => allowedSources.has(r[0]));
+    const totalTSViews = filteredTS.reduce(
+      (sum: number, r: any[]) => sum + Number(r[1] || 0),
+      0,
+    );
+    const trafficSources = filteredTS.map((r: any[]) => ({
+      source: r[0],
+      views: Number(r[1] || 0),
+      percentage:
+        totalTSViews > 0 ? (Number(r[1] || 0) / totalTSViews) * 100 : 0,
+    }));
+
+    // 6) Audience Tab (28 days proxy)
+    const audienceWatchRows = viewerRows;
+    const minutesSubscribed = Number(
+      (audienceWatchRows.find((r: any[]) => r[0] === "SUBSCRIBED") || [])[2] ||
+        0,
+    );
+    const minutesNotSubscribed = Number(
+      (audienceWatchRows.find((r: any[]) => r[0] === "NOT_SUBSCRIBED") ||
+        [])[2] || 0,
+    );
+    const totalMinutes = minutesSubscribed + minutesNotSubscribed;
+    const audience = {
+      views: Number(ovViews || 0),
+      watchTimeHours: Number(ovMinutes || 0) / 60,
+      subscribersNet: Number((ovSubsG || 0) - (ovSubsL || 0)),
+      watchTimeSplit: {
+        subscribedPercent:
+          totalMinutes > 0 ? (minutesSubscribed / totalMinutes) * 100 : 0,
+        notSubscribedPercent:
+          totalMinutes > 0 ? (minutesNotSubscribed / totalMinutes) * 100 : 0,
+      },
+    };
+
+    // Attach dashboard to result without altering existing structure
+    (result as any).dashboard = {
+      topContent48h,
+      overview28d: {
+        totalViews: Number(ovViews || 0),
+        totalWatchTimeHours: Number(ovMinutes || 0) / 60,
+        subscribersGained: Number(ovSubsG || 0),
+        subscribersLost: Number(ovSubsL || 0),
+        netSubscribers: Number((ovSubsG || 0) - (ovSubsL || 0)),
+        topContent: topContent28d,
+      },
+      contentTab: {
+        views: Number(ovViews || 0),
+        publishedContent: contentPublished,
+        viewerBreakdown,
+      },
+      contentPerformance: impressionsFlow,
+      trafficSources,
+      audience,
     };
 
     return res.status(200).json({ success: true, result });
