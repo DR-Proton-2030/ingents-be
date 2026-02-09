@@ -14,6 +14,7 @@ import { uploadFileToS3Service } from "../../../../services/uploadFile/uploadFil
 import UserModel from "../../../../models/users/users.model";
 import PostedContentModel from "../../../../models/postedContent/postedContent.model";
 const FACEBOOK_GRAPH_URL = "https://graph.facebook.com/v20.0";
+import { buildFacebookDashboardBuilder } from "../../../../services/facebook/dashboard.builder";
 
 export const facebookLogin = (req: Request, res: Response) => {
   const { user_id } = req.query;
@@ -440,202 +441,14 @@ export const getFacebookAllDetails = async (req: Request, res: Response) => {
     );
     const pid = resolvedPageId || (pageId as string);
 
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0];
-    const until = new Date().toISOString().split("T")[0];
-
-    const headers = { Authorization: `Bearer ${pageAccessToken}` };
-
-    // Parallel fetches
-    const [
-      pageResp,
-      postsResp,
-      scheduledResp,
-      insightsCountryResp,
-      insightsGenderAgeResp,
-      fanAddsResp,
-    ] = await Promise.all([
-      axios.get(
-        `${FACEBOOK_GRAPH_URL}/${pid}?fields=id,name,about,fan_count,link,cover,category,location,username,picture{url}`,
-        { headers },
-      ),
-      axios
-        .get(
-          `${FACEBOOK_GRAPH_URL}/${pid}/posts?limit=15&fields=id,created_time,message,permalink_url,type,comments.summary(true){id,message,created_time,from}`,
-          { headers },
-        )
-        .catch(async () => {
-          try {
-            const minimal = await axios.get(
-              `${FACEBOOK_GRAPH_URL}/${pid}/posts?limit=15&fields=id,created_time,message,permalink_url,type`,
-              { headers },
-            );
-            return minimal;
-          } catch (_) {
-            return { data: { data: [] } } as any;
-          }
-        }),
-      axios
-        .get(
-          `${FACEBOOK_GRAPH_URL}/${pid}/scheduled_posts?fields=id,message,scheduled_publish_time,permalink_url,full_picture,status_type,created_time,is_published`,
-          { headers },
-        )
-        .catch(() => ({ data: { data: [] } })),
-      axios
-        .get(
-          `${FACEBOOK_GRAPH_URL}/${pid}/insights?metric=page_fans_country&period=lifetime`,
-          { headers },
-        )
-        .catch(() => ({ data: { data: [] } })),
-      axios
-        .get(
-          `${FACEBOOK_GRAPH_URL}/${pid}/insights?metric=page_fans_gender_age&period=lifetime`,
-          { headers },
-        )
-        .catch(() => ({ data: { data: [] } })),
-      axios
-        .get(
-          `${FACEBOOK_GRAPH_URL}/${pid}/insights?metric=page_fan_adds,page_fan_removes&since=${since}&until=${until}&period=day`,
-          { headers },
-        )
-        .catch(() => ({ data: { data: [] } })),
-    ]);
-
-    // Demographics: Top locations (country)
-    const countryInsight = (insightsCountryResp.data.data || []).find(
-      (d: any) => d.name === "page_fans_country",
-    );
-    const countryMap = countryInsight?.values?.[0]?.value || {};
-    const topLocations = Object.entries(countryMap)
-      .map(([country, views]: any) => ({ country, views }))
-      .sort((a: any, b: any) => Number(b.views) - Number(a.views))
-      .slice(0, 5);
-
-    // Demographics: Age/Gender
-    const genderAgeInsight = (insightsGenderAgeResp.data.data || []).find(
-      (d: any) => d.name === "page_fans_gender_age",
-    );
-    const gaMap = genderAgeInsight?.values?.[0]?.value || {};
-    const ageRange = Object.entries(gaMap)
-      .map(([k, v]: any) => ({ ageGroup: k.split(".")[1] || k, views: v }))
-      .reduce((acc: any, cur: any) => {
-        const found = acc.find((a: any) => a.ageGroup === cur.ageGroup);
-        if (found) found.views += cur.views;
-        else acc.push({ ...cur });
-        return acc;
-      }, [])
-      .sort((a: any, b: any) => a.ageGroup.localeCompare(b.ageGroup));
-    const gender = Object.entries(gaMap)
-      .map(([k, v]: any) => ({ gender: k.split(".")[0] || k, views: v }))
-      .reduce((acc: any, cur: any) => {
-        const found = acc.find((g: any) => g.gender === cur.gender);
-        if (found) found.views += cur.views;
-        else acc.push({ ...cur });
-        return acc;
-      }, [])
-      .sort((a: any, b: any) => a.gender.localeCompare(b.gender));
-
-    // Growth trend
-    const fanAdds =
-      (fanAddsResp.data.data || []).find((d: any) => d.name === "page_fan_adds")
-        ?.values || [];
-    const growthTrend = fanAdds.map((r: any) => ({
-      date: r.end_time?.split("T")[0] || "",
-      views: r.value,
-      subscribersGained: r.value,
-    }));
-
-    // Recent posts with simple classification
-    const posts = postsResp.data.data || [];
-    let photos = 0,
-      videos = 0,
-      links = 0,
-      statuses = 0;
-    const recentPosts = posts.map((p: any) => {
-      const type = p.type || p.status_type;
-      if (type === "photo") photos++;
-      else if (type === "video") videos++;
-      else if (type === "link") links++;
-      else statuses++;
-      return {
-        id: p.id,
-        message: p.message,
-        created_time: p.created_time,
-        permalink_url: p.permalink_url,
-        full_picture: p.full_picture,
-        type,
-        shares: p.shares?.count || 0,
-        commentsCount: p.comments?.summary?.total_count || 0,
-      };
-    });
-
-    // Post activity
-    const postActivity = {
-      photos,
-      videos,
-      links,
-      statuses,
-      growthTrend,
-    };
-
-    // Recent comments pulled from recent posts
-    const recentComments = (posts || []).flatMap((p: any) =>
-      (p.comments?.data || []).map((c: any) => ({
-        id: c.id,
-        postId: p.id,
-        text: c.message,
-        author: c.from?.name,
-        created_time: c.created_time,
-      })),
+    // Build dashboard using modular services; handle missing insights with flags
+    const dashboard = await buildFacebookDashboardBuilder(
+      pid,
+      pageAccessToken,
+      "28d",
     );
 
-    // Post schedule
-    const postSchedule = (scheduledResp.data.data || [])
-      .map((sp: any) => ({
-        id: sp.id,
-        title: sp.message,
-        scheduledAt: sp.scheduled_publish_time
-          ? new Date(sp.scheduled_publish_time * 1000).toISOString()
-          : undefined,
-        permalink_url: sp.permalink_url,
-        full_picture: sp.full_picture,
-        status_type: sp.status_type,
-        created_time: sp.created_time,
-        is_published: Boolean(sp.is_published),
-      }))
-      .filter((s: any) => !!s.scheduledAt)
-      .sort(
-        (a: any, b: any) =>
-          new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime(),
-      );
-
-    const page = pageResp.data;
-    const result = {
-      page: {
-        id: page.id,
-        title: page.name,
-        handle: page.username,
-        description: page.about,
-        link: page.link,
-        picture: page.picture?.data?.url,
-        fan_count: page.fan_count,
-        cover: page.cover,
-        category: page.category,
-        location: page.location,
-      },
-      demographics: {
-        topLocations,
-        ageRange,
-        gender,
-      },
-      postActivity,
-      recentPosts,
-      recentComments,
-      postSchedule,
-    };
-
-    return res.status(200).json({ success: true, result });
+    return res.status(200).json({ success: true, result: dashboard });
   } catch (error: any) {
     console.error(
       "Error fetching Facebook all details:",
