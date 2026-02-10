@@ -3,6 +3,16 @@ import UserModel from "../../../../models/users/users.model";
 import CompanyModel from "../../../../models/company/company.model";
 import generateToken from "../../../../services/generateToken/generateToken.service";
 import { ItokenPayload } from "../../../../types/interface/tokenPayload.interface";
+import { google } from "googleapis";
+import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URI } from "../../../../config/config";
+import { SCOPES } from "../../../../services/googleAuth/GoogleAuth";
+import AuthTokenModel from "../../../../models/authToken/authToken.model";
+
+const oauth2Client = new google.auth.OAuth2(
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  REDIRECT_URI,
+);
 
 export const googleSignUp = async (req: Request, res: Response) => {
   try {
@@ -11,7 +21,7 @@ export const googleSignUp = async (req: Request, res: Response) => {
     const userExists = await UserModel.findOne({ email: user_details.email });
     if (userExists) {
       const companyInstance = await CompanyModel.findById(
-        userExists.company_object_id
+        userExists.company_object_id,
       );
 
       const tokenPayload: ItokenPayload = {
@@ -38,6 +48,57 @@ export const googleSignUp = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error during Google sign-up:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+export const googleAuth = async (req: Request, res: Response) => {
+  try {
+    const url = oauth2Client.generateAuthUrl({
+      access_type: "offline",
+      scope: SCOPES,
+    });
+    res.redirect(url);
+  } catch (error) {
+    console.error("Error during Google authentication:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+export const googleAuthCallback = async (req: Request, res: Response) => {
+  try {
+    const { code } = req.query;
+    const {company_object_id} = req.user;
+
+    if (!code || typeof code !== "string") {
+      return res
+        .status(400)
+        .json({ message: "Authorization code is required" });
+    }
+
+    const { tokens } = await oauth2Client.getToken(code);
+
+    const { access_token, refresh_token, expiry_date } = tokens;
+
+    await AuthTokenModel.updateOne({ company_object_id: company_object_id }, {
+      $set:{
+        google:{
+            access_token,
+            refresh_token,
+            expiry_date: new Date(expiry_date || 0).getTime(),
+        }
+      }
+    });
+
+    oauth2Client.setCredentials(tokens);
+
+    res.json({ message: "Google authentication successful", tokens });
+  } catch (error) {
+    console.error("Error during Google authentication callback:", error);
     return res.status(500).json({
       message: "Internal server error",
     });
