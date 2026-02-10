@@ -12,7 +12,7 @@ const FACEBOOK_GRAPH_URL = "https://graph.facebook.com";
 export const getFacebookAuthURL = (userId: string) => {
   const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FACEBOOK_CLIENT_ID}&redirect_uri=${encodeURIComponent(
     REDIRECT_URI,
-  )}&scope=email,public_profile,pages_read_engagement,pages_manage_posts,pages_show_list&response_type=code&state=${userId}`;
+  )}&scope=email,public_profile,pages_read_engagement,pages_manage_posts,pages_show_list&response_type=code&state=${userId}&auth_type=rerequest&return_scopes=true`;
   return authUrl;
 };
 // cl
@@ -90,10 +90,13 @@ export const getPageTokenService = async (userId: string, pageId: string) => {
 
   const userAccessToken = user.facebook.access_token;
 
+  // Request fields explicitly; newer Graph versions may omit access_token unless asked.
   const pagesRes = await axios.get(
-    `https://graph.facebook.com/v20.0/me/accounts?access_token=${userAccessToken}`,
+    `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token,category&access_token=${userAccessToken}`,
   );
   const pageData = pagesRes.data?.data?.find((p: any) => p.id === pageId);
+
+  console.log("Fetched pages for user:", pagesRes.data);
   if (!pageData) {
     throw new Error("Page not found or user is not admin of this page");
   }
