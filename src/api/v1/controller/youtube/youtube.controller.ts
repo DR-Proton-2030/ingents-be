@@ -10,6 +10,7 @@ import {
   getAuthorizedClient,
   resolveYouTubePublishAt,
 } from "../../../../services/youtube/youtube.service";
+import { fetchSingleVideoAnalytics } from "../../../../services/youtube/videoAnalytics.service";
 import { fetchChannelInfo } from "../../../../services/youtube/data/channel";
 import {
   getCustomWindow,
@@ -1101,6 +1102,59 @@ export const getVideoStatistics = async (req: Request, res: Response) => {
       success: false,
       message: "Failed to fetch video statistics",
       error: error.message,
+    });
+  }
+};
+
+export const getSingleVideoAnalytics = async (req: Request, res: Response) => {
+  try {
+    const { videoId } = req.body;
+    const userId =
+      (req.body?.userId as string) ||
+      (req.body?.user_id as string) ||
+      (req.query?.userId as string) ||
+      (req.query?.user_id as string);
+
+    if (!userId || !videoId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId and videoId required",
+      });
+    }
+
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return res
+        .status(401)
+        .json({ success: false, message: "User not found" });
+    }
+    if (!user.youtube || !user.youtube.access_token) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid YouTube token" });
+    }
+
+    const { youtube, analytics } = await getAuthorizedClient(
+      user.youtube.access_token,
+    );
+
+    const result = await fetchSingleVideoAnalytics({
+      youtube,
+      analytics,
+      videoId: String(videoId),
+    });
+
+    return res.status(200).json({ success: true, result });
+  } catch (error: any) {
+    const status = Number(error?.statusCode) || 500;
+    console.error("Error fetching single video analytics:", error);
+    return res.status(status).json({
+      success: false,
+      message:
+        status === 404
+          ? "Video not found"
+          : "Failed to fetch single video analytics",
+      error: error?.message,
     });
   }
 };

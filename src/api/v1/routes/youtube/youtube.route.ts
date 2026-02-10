@@ -13,6 +13,7 @@ import {
   getRecentSubscribers,
   getUserSubscriptions,
   getVideoStatistics,
+  getSingleVideoAnalytics,
   getChannelStatistics,
   getYoutubeAllDetails,
   deleteYoutubeVideo,
@@ -43,6 +44,7 @@ youtubeRouter.post("/subscriptions", getUserSubscriptions);
 
 // Statistics
 youtubeRouter.post("/video/stats", getVideoStatistics);
+youtubeRouter.post("/video/analytics", getSingleVideoAnalytics);
 youtubeRouter.post("/channel/stats", getChannelStatistics);
 youtubeRouter.get("/channel/get-all-details", getYoutubeAllDetails);
 
