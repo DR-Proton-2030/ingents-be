@@ -28,17 +28,44 @@ export const facebookLogin = (req: Request, res: Response) => {
 
 export const facebookAuthCallback = async (req: Request, res: Response) => {
   try {
-    const { code, state } = req.query;
+    const { code, state, granted_scopes, denied_scopes } = req.query;
 
     console.log("===>called state", state);
     console.log("Facebook callback code and state : ", code, state);
+    if (granted_scopes || denied_scopes) {
+      console.log("Facebook scopes (granted/denied):", {
+        granted_scopes,
+        denied_scopes,
+      });
+    }
     if (!code) return res.status(400).json({ error: "No code provided" });
 
     // Exchange code for access token & user data
     const { tokens, user } = await getFacebookUser(code as string);
 
     console.log("====>state : ", state);
-    const userId = atob(state as string);
+    const rawState = String(state || "");
+    const isObjectId = (v: string) => /^[a-fA-F0-9]{24}$/.test(v);
+
+    // `state` is set to userId (not base64) in getFacebookAuthURL.
+    // Accept both raw ObjectId and base64-encoded ObjectId for backward/forward compatibility.
+    const decodedState = (() => {
+      if (isObjectId(rawState)) return rawState;
+      try {
+        const d = atob(rawState);
+        return isObjectId(d) ? d : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (!decodedState) {
+      return res.status(400).json({
+        error: "Invalid state parameter",
+      });
+    }
+
+    const userId = decodedState;
     // Redirect to frontend with token & pages as query params
     res.redirect(
       `${process.env.FRONTEND_URL}/dashboard/social-media?platform=facebook&token=${
@@ -58,16 +85,38 @@ export const fetchFacebookPages = async (req: Request, res: Response) => {
   try {
     console.log("fetchFacebookPages called");
     const userAccessToken = req.headers.authorization?.split("Bearer ")[1];
-    const userId = req.query.userId as string;
-    console.log("===========>", userId);
+    const rawUserId =
+      (req.query.userId as string) ||
+      (req.query.user_id as string) ||
+      (req.query.user as string);
+    console.log("===========>", rawUserId);
     if (!userAccessToken) {
       return res
         .status(401)
         .json({ error: "Unauthorized - Missing Facebook Token" });
     }
-    if (!userId) {
+    if (!rawUserId) {
       return res.status(400).json({ error: "Missing userId in query" });
     }
+
+    const isObjectId = (v: string) => /^[a-fA-F0-9]{24}$/.test(v);
+    const userId = (() => {
+      if (isObjectId(rawUserId)) return rawUserId;
+      try {
+        const d = atob(String(rawUserId));
+        return isObjectId(d) ? d : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (!userId) {
+      return res.status(400).json({
+        error: "Invalid userId in query",
+      });
+    }
+
+    console.log("===========>", userId);
 
     // Get long-lived token
     const longTokenResponse = await getLongLivedToken(userAccessToken);
@@ -80,16 +129,53 @@ export const fetchFacebookPages = async (req: Request, res: Response) => {
         { $set: { "facebook.access_token": longLivedToken } },
         { new: true },
       ),
-      axios.get(
-        `https://graph.facebook.com/v18.0/me/accounts?fields=id,name,access_token&access_token=${longLivedToken}`,
-      ),
+      axios.get(`https://graph.facebook.com/v20.0/me/accounts`, {
+        params: {
+          fields: "id,name,access_token,category,tasks",
+          limit: 200,
+          access_token: longLivedToken,
+        },
+      }),
     ]);
 
     console.log("Saved user token : ", savedUser);
+
+    const pages = pagesResponse.data?.data || [];
+    const isProd = process.env.NODE_ENV === "production";
+
+    // If pages are empty, include helpful debug context (non-production only)
+    let debug: any = undefined;
+    if (!isProd && Array.isArray(pages) && pages.length === 0) {
+      try {
+        const appAccessToken = `${process.env.FACEBOOK_CLIENT_ID}|${process.env.FACEBOOK_CLIENT_SECRET}`;
+        const [debugTokenRes, permissionsRes] = await Promise.all([
+          axios.get("https://graph.facebook.com/debug_token", {
+            params: {
+              input_token: longLivedToken,
+              access_token: appAccessToken,
+            },
+          }),
+          axios.get("https://graph.facebook.com/v20.0/me/permissions", {
+            params: { access_token: longLivedToken },
+          }),
+        ]);
+
+        debug = {
+          debug_token: debugTokenRes.data,
+          permissions: permissionsRes.data,
+        };
+      } catch (dbgErr: any) {
+        debug = {
+          error: dbgErr?.response?.data || dbgErr?.message || String(dbgErr),
+        };
+      }
+    }
+
     return res.json({
       message: "Token saved and pages fetched successfully",
       user: savedUser,
-      result: pagesResponse.data.data,
+      result: pages,
+      ...(debug ? { debug } : {}),
     });
   } catch (error: any) {
     console.error(
