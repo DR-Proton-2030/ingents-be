@@ -6,7 +6,7 @@ import { IAuthToken } from "../../types/interface/authToken.interface";
 
 export const authTokenSchema: Schema<IAuthToken> = new Schema<IAuthToken>(
   {
-    company_object_id: SCHEMA_DEFINITION_PROPERTY.requiredObjectId,
+    user_object_id: SCHEMA_DEFINITION_PROPERTY.requiredObjectId,
     google: {
         access_token: SCHEMA_DEFINITION_PROPERTY.requiredString,
         refresh_token: SCHEMA_DEFINITION_PROPERTY.requiredString,

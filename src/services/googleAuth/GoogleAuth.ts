@@ -15,11 +15,11 @@ const oauth2Client = new google.auth.OAuth2(
 
 export const SCOPES = ["https://www.googleapis.com/auth/calendar"];
 
-export const getAuthorizedGoogleClient = async (company_object_id : string) => {
-  const saved = await AuthTokenModel.findOne({ company_object_id });
+export const getAuthorizedGoogleClient = async (user_object_id : string) => {
+  const saved = await AuthTokenModel.findOne({ user_object_id });
 
   if(!saved) {
-    throw new Error("No Google auth token found for the company");
+    throw new Error("No Google auth token found for the user");
   }
   const { access_token, refresh_token, expiry_date } = saved.google;
 
@@ -35,7 +35,7 @@ export const getAuthorizedGoogleClient = async (company_object_id : string) => {
     const { credentials } = await oauth2Client.refreshAccessToken();
 
     await AuthTokenModel.updateOne(
-      { company_object_id },
+      { user_object_id },
       {
         google:{
             access_token: credentials.access_token,

@@ -1,9 +1,9 @@
 import { google } from "googleapis";
 import { getAuthorizedGoogleClient } from "../googleAuth/GoogleAuth";
 
-export const getCalendarEvents = async (company_object_id: string) => {
+export const getCalendarEvents = async (user_object_id: string) => {
   try {
-    const authClient = await getAuthorizedGoogleClient(company_object_id);
+    const authClient = await getAuthorizedGoogleClient(user_object_id);
 
     const calendar = google.calendar({
       version: "v3",

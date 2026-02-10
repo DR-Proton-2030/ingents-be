@@ -72,7 +72,7 @@ export const googleAuth = async (req: Request, res: Response) => {
 export const googleAuthCallback = async (req: Request, res: Response) => {
   try {
     const { code } = req.query;
-    const {company_object_id} = req.user;
+    const {_id} = req.user;
 
     if (!code || typeof code !== "string") {
       return res
@@ -84,7 +84,7 @@ export const googleAuthCallback = async (req: Request, res: Response) => {
 
     const { access_token, refresh_token, expiry_date } = tokens;
 
-    await AuthTokenModel.updateOne({ company_object_id: company_object_id }, {
+    const updatedAuthToken =await AuthTokenModel.findOneAndUpdate({ user_object_id: _id }, {
       $set:{
         google:{
             access_token,
@@ -93,6 +93,17 @@ export const googleAuthCallback = async (req: Request, res: Response) => {
         }
       }
     });
+    
+    if (!updatedAuthToken) {
+      await AuthTokenModel.create({
+        user_object_id: _id,
+        google: {
+          access_token,
+          refresh_token,
+          expiry_date: new Date(expiry_date || 0).getTime(),
+        },
+      });
+    }
 
     oauth2Client.setCredentials(tokens);
 
