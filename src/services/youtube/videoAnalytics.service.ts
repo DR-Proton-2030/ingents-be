@@ -15,6 +15,147 @@ const yesterdayYMD = () => toYMD(new Date(Date.now() - 24 * 60 * 60 * 1000));
 const clampEndDate = (startYMD: string, endYMD: string) =>
   endYMD < startYMD ? startYMD : endYMD;
 
+export type VideoAnalyticsDateRange =
+  | "YESTERDAY"
+  | "LAST_7_DAYS"
+  | "LAST_28_DAYS"
+  | "LAST_90_DAYS"
+  | "THIS_MONTH"
+  | "LAST_MONTH"
+  | "LIFETIME"
+  | "CUSTOM";
+
+export type CustomRange = {
+  startDate: string;
+  endDate: string;
+};
+
+const isYMD = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+const parseYMDToUTCDate = (ymd: string): Date | null => {
+  if (!isYMD(ymd)) return null;
+  const [yy, mm, dd] = ymd.split("-").map((x) => Number(x));
+  if (!Number.isFinite(yy) || !Number.isFinite(mm) || !Number.isFinite(dd))
+    return null;
+  if (mm < 1 || mm > 12) return null;
+  if (dd < 1 || dd > 31) return null;
+  const d = new Date(Date.UTC(yy, mm - 1, dd));
+  // Validate round-trip (catches invalid days like 2026-02-31)
+  return toYMD(d) === ymd ? d : null;
+};
+
+const shiftYMD = (ymd: string, daysDelta: number): string => {
+  const d = parseYMDToUTCDate(ymd);
+  if (!d) return ymd;
+  return toYMD(new Date(d.getTime() + daysDelta * 24 * 60 * 60 * 1000));
+};
+
+const maxYMD = (a: string, b: string) => (a > b ? a : b);
+const minYMD = (a: string, b: string) => (a < b ? a : b);
+
+const resolveVideoDateWindow = (args: {
+  dateRange?: VideoAnalyticsDateRange;
+  customRange?: CustomRange;
+  publishedAtYMD: string | null;
+}) => {
+  const { dateRange, customRange, publishedAtYMD } = args;
+  const effectiveRange: VideoAnalyticsDateRange = dateRange || "LAST_28_DAYS";
+
+  // Hard rule: never include today
+  const maxEnd = yesterdayYMD();
+
+  const clampToPublished = (startYMD: string) =>
+    publishedAtYMD ? maxYMD(startYMD, publishedAtYMD) : startYMD;
+
+  const end = (candidateEnd: string) => minYMD(candidateEnd, maxEnd);
+
+  let startDate: string;
+  let endDate: string;
+
+  if (effectiveRange === "YESTERDAY") {
+    startDate = maxEnd;
+    endDate = maxEnd;
+  } else if (effectiveRange === "LAST_7_DAYS") {
+    endDate = maxEnd;
+    startDate = shiftYMD(endDate, -6);
+  } else if (effectiveRange === "LAST_28_DAYS") {
+    endDate = maxEnd;
+    startDate = shiftYMD(endDate, -27);
+  } else if (effectiveRange === "LAST_90_DAYS") {
+    endDate = maxEnd;
+    startDate = shiftYMD(endDate, -89);
+  } else if (effectiveRange === "THIS_MONTH") {
+    const now = new Date();
+    const thisMonthStart = `${now.getUTCFullYear()}-${pad2(
+      now.getUTCMonth() + 1,
+    )}-01`;
+    endDate = end(maxEnd);
+    startDate = thisMonthStart;
+    // If "this month" would require today (e.g., it's the 1st), fall back to yesterday.
+    if (endDate < startDate) {
+      startDate = maxEnd;
+      endDate = maxEnd;
+    }
+  } else if (effectiveRange === "LAST_MONTH") {
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth();
+    const lastMonthStartDate = new Date(Date.UTC(y, m - 1, 1));
+    const lastMonthEndDate = new Date(Date.UTC(y, m, 0));
+    startDate = toYMD(lastMonthStartDate);
+    endDate = end(toYMD(lastMonthEndDate));
+  } else if (effectiveRange === "LIFETIME") {
+    startDate = publishedAtYMD || "2008-01-01";
+    endDate = end(maxEnd);
+  } else if (effectiveRange === "CUSTOM") {
+    const cr = customRange || ({} as any);
+    if (!cr?.startDate || !cr?.endDate) {
+      const err: any = new Error(
+        "customRange.startDate and customRange.endDate are required for CUSTOM",
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!isYMD(cr.startDate) || !isYMD(cr.endDate)) {
+      const err: any = new Error(
+        "customRange dates must be in YYYY-MM-DD format",
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!parseYMDToUTCDate(cr.startDate) || !parseYMDToUTCDate(cr.endDate)) {
+      const err: any = new Error("customRange contains invalid calendar dates");
+      err.statusCode = 400;
+      throw err;
+    }
+    endDate = end(cr.endDate);
+    startDate = cr.startDate;
+    if (endDate < startDate) {
+      const err: any = new Error(
+        "customRange.endDate must be <= yesterday and >= startDate",
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+  } else {
+    // Defensive fallback
+    endDate = maxEnd;
+    startDate = shiftYMD(endDate, -27);
+  }
+
+  // Ensure we don't query before publish date.
+  startDate = clampToPublished(startDate);
+  endDate = clampEndDate(startDate, endDate);
+  endDate = end(endDate);
+
+  return {
+    dateRange: effectiveRange,
+    startDate,
+    endDate,
+    customRange: effectiveRange === "CUSTOM" ? customRange || null : null,
+  };
+};
+
 const secondsToHMS = (secondsRaw: unknown): string => {
   const seconds = Number(secondsRaw || 0);
   if (!Number.isFinite(seconds) || seconds <= 0) return "00:00:00";
@@ -62,6 +203,12 @@ const rows = (resp: any): any[][] => {
 };
 
 export type SingleVideoAnalyticsResult = {
+  appliedFilter: {
+    dateRange: VideoAnalyticsDateRange;
+    startDate: string;
+    endDate: string;
+    customRange: CustomRange | null;
+  };
   video: {
     id: string;
     title: string | null;
@@ -154,8 +301,10 @@ export const fetchSingleVideoAnalytics = async (opts: {
   youtube: youtube_v3.Youtube;
   analytics: youtubeAnalytics_v2.Youtubeanalytics;
   videoId: string;
+  dateRange?: VideoAnalyticsDateRange;
+  customRange?: CustomRange;
 }): Promise<SingleVideoAnalyticsResult> => {
-  const { youtube, analytics, videoId } = opts;
+  const { youtube, analytics, videoId, dateRange, customRange } = opts;
   const limitations: Limitation[] = [];
 
   const videoResp = await youtube.videos.list({
@@ -171,8 +320,13 @@ export const fetchSingleVideoAnalytics = async (opts: {
   }
 
   const publishedAt = item.snippet?.publishedAt || null;
-  const startDate = publishedAt ? toYMD(new Date(publishedAt)) : "2008-01-01";
-  const endDate = clampEndDate(startDate, yesterdayYMD());
+  const publishedAtYMD = publishedAt ? toYMD(new Date(publishedAt)) : null;
+  const appliedFilter = resolveVideoDateWindow({
+    dateRange,
+    customRange,
+    publishedAtYMD,
+  });
+  const { startDate, endDate } = appliedFilter;
 
   const durationSec = isoToSeconds(item.contentDetails?.duration || undefined);
   const likelyShort = durationSec > 0 && durationSec <= 60;
@@ -573,6 +727,7 @@ export const fetchSingleVideoAnalytics = async (opts: {
   // Note: we intentionally avoid adding static/hardcoded limitation entries.
 
   return {
+    appliedFilter,
     video: {
       id: item.id,
       title: item.snippet?.title || null,

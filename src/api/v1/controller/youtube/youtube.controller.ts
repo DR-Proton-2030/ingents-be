@@ -1108,7 +1108,7 @@ export const getVideoStatistics = async (req: Request, res: Response) => {
 
 export const getSingleVideoAnalytics = async (req: Request, res: Response) => {
   try {
-    const { videoId } = req.body;
+    const { videoId, dateRange, customRange } = req.body;
     const userId =
       (req.body?.userId as string) ||
       (req.body?.user_id as string) ||
@@ -1142,6 +1142,8 @@ export const getSingleVideoAnalytics = async (req: Request, res: Response) => {
       youtube,
       analytics,
       videoId: String(videoId),
+      dateRange: dateRange as any,
+      customRange: customRange as any,
     });
 
     return res.status(200).json({ success: true, result });
