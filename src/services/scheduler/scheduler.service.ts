@@ -9,25 +9,12 @@ import { postToInstagram } from "../instagram/postToInstagram";
 import { postToYoutube } from "../youtube/postToYoutube";
 import { postToX } from "../x/postToX";
 import { Types } from "mongoose";
+import { SocialMediaJobData } from "../../types/interface/socialMediaJob.interface";
 
 // Track if Redis is available
 let isRedisAvailable = false;
 let socialMediaQueue: Queue<SocialMediaJobData> | null = null;
 let queueEvents: QueueEvents | null = null;
-
-// Define job data interface
-export interface SocialMediaJobData {
-  scheduledPostId: string;
-  platform: "facebook" | "instagram" | "youtube" | "x";
-  userId: string;
-  content: string;
-  mediaUrls?: string[];
-  mediaType?: "image" | "video" | "text";
-  hashtags?: string[];
-  pageId?: string;
-  channelId?: string;
-  platformSpecificData?: Record<string, any>;
-}
 
 // Initialize Queue lazily
 const getQueue = (): Queue<SocialMediaJobData> | null => {
@@ -409,15 +396,15 @@ export const initializeWorker = async (): Promise<Worker<SocialMediaJobData> | n
           );
 
           // Worker event handlers
-          worker.on("completed", (job) => {
-            console.log(`Job ${job.id} completed successfully`);
+          worker.on("completed", (job: Job<SocialMediaJobData>) => {
+            console.log(`Job ${job?.id} completed successfully`);
           });
 
-          worker.on("failed", (job, err) => {
+            worker.on("failed", (job: Job<SocialMediaJobData> | undefined, err: Error) => {
             console.error(`Job ${job?.id} failed with error:`, err.message);
-          });
+            });
 
-          worker.on("error", (err) => {
+          worker.on("error", (err: Error) => {
             console.error("Worker error:", err.message);
           });
 

@@ -24,3 +24,7 @@ export const SETU_CLIENT_ID = process.env.SETU_CLIENT_ID;
 export const SETU_CLIENT_SECRET = process.env.SETU_CLIENT_SECRET;
 
 export const FRONTEND_URL = process.env.FRONTEND_URL;
+
+export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+export const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+export const REDIRECT_URI = process.env.REDIRECT_URI;
