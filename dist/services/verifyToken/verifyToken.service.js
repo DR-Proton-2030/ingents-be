@@ -15,7 +15,12 @@ const verifyToken = (token) => {
         return decoded;
     }
     catch (error) {
-        console.error("Token verification failed:", error);
+        if (error.name === "TokenExpiredError") {
+            console.warn("Token expired:", error.expiredAt);
+        }
+        else {
+            console.error("Token verification failed:", error.message);
+        }
         return null;
     }
 };

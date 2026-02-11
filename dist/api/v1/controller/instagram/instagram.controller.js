@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.publishInstagramPost = exports.fetchInstagramProfileController = exports.instagramAuthCallback = exports.instagrmaLogin = void 0;
 const instagram_service_1 = require("../../../../services/instagram/instagram.service");
 const users_model_1 = __importDefault(require("../../../../models/users/users.model"));
+const postedContent_model_1 = __importDefault(require("../../../../models/postedContent/postedContent.model"));
 const instagrmaLogin = (req, res) => {
     const { user_id } = req.query;
     console.log("user_id", user_id);
@@ -74,7 +75,7 @@ const fetchInstagramProfileController = (req, res) => __awaiter(void 0, void 0, 
 exports.fetchInstagramProfileController = fetchInstagramProfileController;
 const publishInstagramPost = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { access_token, igUserId, image_url, caption } = req.body;
+        const { access_token, igUserId, image_url, caption, userId } = req.body;
         if (!access_token || !igUserId || !image_url) {
             return res
                 .status(400)
@@ -91,6 +92,20 @@ const publishInstagramPost = (req, res) => __awaiter(void 0, void 0, void 0, fun
             igUserId,
             containerId: container.id,
         });
+        // Save to history
+        if (userId) {
+            yield postedContent_model_1.default.create({
+                user_id: userId,
+                platform: "instagram",
+                content: caption || "",
+                media_urls: [image_url],
+                media_type: "image",
+                posted_at: new Date(),
+                platform_post_id: published.id,
+                is_scheduled: false,
+                status: "published",
+            });
+        }
         res.status(200).json({
             success: true,
             message: "Instagrma post published successfully....",

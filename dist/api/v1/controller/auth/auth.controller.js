@@ -89,7 +89,7 @@ const signUp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             secure: config_1.NODE_ENV === "production", // Use secure cookies in production
             sameSite: config_1.NODE_ENV === "production" ? "none" : "lax",
             path: "/", // Makes cookie accessible across the entire app
-            maxAge: 3 * 60 * 60 * 1000, // 3 hours expiration
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days expiration
             domain: config_1.NODE_ENV === "production" ? ".ingents.ai" : "localhost", // Set domain for production
         });
         const userDetails = Object.assign(Object.assign({}, userInstance.toObject()), { company_details: companyInstance.toObject() });
@@ -144,7 +144,7 @@ const signIn = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const userObj = user.toObject();
         delete userObj.password;
         // 5️⃣ Set cookie (FIXED)
-        res.cookie("token", token, Object.assign({ httpOnly: true, secure: config_1.NODE_ENV === "production", sameSite: config_1.NODE_ENV === "production" ? "none" : "strict", path: "/", maxAge: 3 * 60 * 60 * 1000 }, (config_1.NODE_ENV === "production" && { domain: ".ingents.ai" })));
+        res.cookie("token", token, Object.assign({ httpOnly: true, secure: config_1.NODE_ENV === "production", sameSite: config_1.NODE_ENV === "production" ? "none" : "strict", path: "/", maxAge: 7 * 24 * 60 * 60 * 1000 }, (config_1.NODE_ENV === "production" && { domain: ".ingents.ai" })));
         // 6️⃣ Response
         return res.status(200).json({
             message: "User logged in successfully",

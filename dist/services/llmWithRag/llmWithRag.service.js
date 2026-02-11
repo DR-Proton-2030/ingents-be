@@ -13,6 +13,7 @@ exports.LLMWithRagService = void 0;
 const openai_adapter_1 = require("../../adapter/llm/openai.adapter");
 const gemini_adapter_1 = require("../../adapter/llm/gemini.adapter");
 const companyEmbeddings_service_1 = require("../companyEmbeddings/companyEmbeddings.service");
+const imageGeneration_service_1 = require("../imageGeneration/imageGeneration.service");
 class LLMWithRagService {
     constructor() {
         this.geminiAdapter = new gemini_adapter_1.GeminiAdapter();
@@ -49,13 +50,10 @@ class LLMWithRagService {
      */
     generateGeminiImagesWithRag(prompt_1, ragData_1) {
         return __awaiter(this, arguments, void 0, function* (prompt, ragData, numberOfImages = 1, s3KeyPrefix = "rag-generated-images") {
-            // console.log("---------final prompt is-----", prompt);
-            return yield this.geminiAdapter.generateImages({
-                prompt,
-                numberOfImages,
-                s3KeyPrefix,
-                ragData
-            });
+            const ragContext = ragData ? this.formatRagContext(ragData) : "";
+            const enhancedPrompt = `${prompt}${ragContext}`;
+            const results = yield Promise.all(Array.from({ length: numberOfImages }, () => (0, imageGeneration_service_1.generateImageWithGemini)(enhancedPrompt, s3KeyPrefix)));
+            return results.filter((url) => Boolean(url));
         });
     }
     /**
@@ -167,6 +165,26 @@ class LLMWithRagService {
             maxContexts,
             relevanceThreshold
         };
+    }
+    formatRagContext(ragData) {
+        if (!ragData.contexts || ragData.contexts.length === 0) {
+            return "";
+        }
+        const relevantContexts = ragData.contexts
+            .filter(context => {
+            var _a;
+            return !ragData.relevanceThreshold ||
+                !((_a = context.metadata) === null || _a === void 0 ? void 0 : _a.relevanceScore) ||
+                context.metadata.relevanceScore >= ragData.relevanceThreshold;
+        })
+            .slice(0, ragData.maxContexts || 5);
+        if (relevantContexts.length === 0) {
+            return "";
+        }
+        const contextString = relevantContexts
+            .map((context, index) => { var _a; return `Context ${index + 1} (${((_a = context.metadata) === null || _a === void 0 ? void 0 : _a.source) || "unknown"}):\n${context.content}`; })
+            .join("\n\n");
+        return `\n\nRelevant Context Information:\n${contextString}\n\nPlease use this context information to provide more accurate and relevant responses.`;
     }
 }
 exports.LLMWithRagService = LLMWithRagService;

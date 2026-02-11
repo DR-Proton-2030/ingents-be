@@ -2,7 +2,7 @@ import { generateOpenAiResponse, getOpenAIEmbeddings } from "../../adapter/llm/o
 import { GeminiAdapter } from "../../adapter/llm/gemini.adapter";
 import { IRagData, IRagContext } from "../../types/interface/ragData.interface";
 import { CompanyEmbeddingsService } from "../companyEmbeddings/companyEmbeddings.service";
-import { RagService } from "../ragService/RagService";
+import { generateImageWithGemini } from "../imageGeneration/imageGeneration.service";
 
 export class LLMWithRagService {
   private geminiAdapter: GeminiAdapter;
@@ -53,14 +53,16 @@ export class LLMWithRagService {
     numberOfImages: number = 1,
     s3KeyPrefix: string = "rag-generated-images"
   ) {
+    const ragContext = ragData ? this.formatRagContext(ragData) : "";
+    const enhancedPrompt = `${prompt}${ragContext}`;
 
-    // console.log("---------final prompt is-----", prompt);
-    return await this.geminiAdapter.generateImages({
-      prompt,
-      numberOfImages,
-      s3KeyPrefix,
-      ragData
-    });
+    const results = await Promise.all(
+      Array.from({ length: numberOfImages }, () =>
+        generateImageWithGemini(enhancedPrompt, s3KeyPrefix)
+      )
+    );
+
+    return results.filter((url): url is string => Boolean(url));
   }
 
   /**
@@ -200,5 +202,31 @@ export class LLMWithRagService {
       maxContexts,
       relevanceThreshold
     };
+  }
+
+  private formatRagContext(ragData: IRagData): string {
+    if (!ragData.contexts || ragData.contexts.length === 0) {
+      return "";
+    }
+
+    const relevantContexts = ragData.contexts
+      .filter(context =>
+        !ragData.relevanceThreshold ||
+        !context.metadata?.relevanceScore ||
+        context.metadata.relevanceScore >= ragData.relevanceThreshold
+      )
+      .slice(0, ragData.maxContexts || 5);
+
+    if (relevantContexts.length === 0) {
+      return "";
+    }
+
+    const contextString = relevantContexts
+      .map((context, index) =>
+        `Context ${index + 1} (${context.metadata?.source || "unknown"}):\n${context.content}`
+      )
+      .join("\n\n");
+
+    return `\n\nRelevant Context Information:\n${contextString}\n\nPlease use this context information to provide more accurate and relevant responses.`;
   }
 }

@@ -16,6 +16,7 @@ const facebook_route_1 = __importDefault(require("./api/v1/routes/facebook/faceb
 const user_route_1 = __importDefault(require("./api/v1/routes/user/user.route"));
 const instagram_route_1 = __importDefault(require("./api/v1/routes/instagram/instagram.route"));
 const youtube_route_1 = __importDefault(require("./api/v1/routes/youtube/youtube.route"));
+const x_route_1 = __importDefault(require("./api/v1/routes/x/x.route"));
 const bank_routes_1 = __importDefault(require("./api/v1/routes/bank/bank.routes"));
 const tasks_routes_1 = __importDefault(require("./api/v1/routes/tasks/tasks.routes"));
 const taskPhase_routes_1 = __importDefault(require("./api/v1/routes/taskPhase/taskPhase.routes"));
@@ -25,6 +26,9 @@ const httpLogger_middleware_1 = __importDefault(require("./api/v1/middlewares/ip
 const waitList_routes_1 = __importDefault(require("./api/v1/routes/waitlist/waitList.routes"));
 const meeting_routes_1 = __importDefault(require("./api/v1/routes/meeting/meeting.routes"));
 const project_routes_1 = __importDefault(require("./api/v1/routes/project/project.routes"));
+const scheduler_routes_1 = __importDefault(require("./api/v1/routes/scheduler/scheduler.routes"));
+const social_route_1 = __importDefault(require("./api/v1/routes/social/social.route"));
+const scheduler_service_1 = require("./services/scheduler/scheduler.service");
 const app = (0, express_1.default)();
 app.use(ipTracker_middleware_1.default);
 app.use(httpLogger_middleware_1.default);
@@ -59,6 +63,7 @@ app.use("/api/v1/email-templates", emailTemplate_routes_1.default);
 app.use("/api/v1/facebook", facebook_route_1.default);
 app.use("/api/v1/ig", instagram_route_1.default);
 app.use("/api/v1/youtube", youtube_route_1.default);
+app.use("/api/v1/x", x_route_1.default);
 app.use("/api/v1/bank", bank_routes_1.default);
 app.use("/api/v1/tasks", tasks_routes_1.default);
 app.use("/api/v1/task-phase", taskPhase_routes_1.default);
@@ -66,6 +71,18 @@ app.use("/api/v1/task-tags", tag_routes_1.default);
 app.use("/api/v1/waitlist", waitList_routes_1.default);
 app.use("/api/v1/meetings", meeting_routes_1.default);
 app.use("/api/v1/projects", project_routes_1.default);
+app.use("/api/v1/scheduler", scheduler_routes_1.default);
+app.use("/api/v1/social", social_route_1.default);
+// Initialize BullMQ Worker for Social Media Scheduler (async, non-blocking)
+(0, scheduler_service_1.initializeWorker)()
+    .then((worker) => {
+    if (worker) {
+        console.log("\x1b[32m \x1b[1m[BullMQ] Social Media Scheduler Worker initialized\x1b[0m");
+    }
+})
+    .catch((error) => {
+    console.warn("\x1b[33m[BullMQ] Scheduler initialization skipped\x1b[0m");
+});
 // Default route for health check
 app.get("/", (req, res) => {
     res.send(`<h1>Received Successfully</h1>`);

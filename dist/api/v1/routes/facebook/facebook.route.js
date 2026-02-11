@@ -21,4 +21,8 @@ router.post("/post", upload.fields([
     { name: "image", maxCount: 1 },
     { name: "video", maxCount: 1 },
 ]), facebook_controller_1.postFacebookUniversal);
+//  Aggregated Page Details
+router.get("/page/get-all-details", facebook_controller_1.getFacebookAllDetails);
+// Disconnect Facebook
+router.post("/disconnect", facebook_controller_1.disconnectFacebook);
 exports.default = router;

@@ -12,10 +12,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.googleSignUp = void 0;
+exports.googleAuthCallback = exports.googleAuth = exports.googleSignUp = void 0;
 const users_model_1 = __importDefault(require("../../../../models/users/users.model"));
 const company_model_1 = __importDefault(require("../../../../models/company/company.model"));
 const generateToken_service_1 = __importDefault(require("../../../../services/generateToken/generateToken.service"));
+const googleapis_1 = require("googleapis");
+const config_1 = require("../../../../config/config");
+const GoogleAuth_1 = require("../../../../services/googleAuth/GoogleAuth");
+const authToken_model_1 = __importDefault(require("../../../../models/authToken/authToken.model"));
+const oauth2Client = new googleapis_1.google.auth.OAuth2(config_1.GOOGLE_CLIENT_ID, config_1.GOOGLE_CLIENT_SECRET, config_1.REDIRECT_URI);
 const googleSignUp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { user_details } = req.body;
@@ -49,3 +54,60 @@ const googleSignUp = (req, res) => __awaiter(void 0, void 0, void 0, function* (
     }
 });
 exports.googleSignUp = googleSignUp;
+const googleAuth = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const url = oauth2Client.generateAuthUrl({
+            access_type: "offline",
+            scope: GoogleAuth_1.SCOPES,
+        });
+        res.redirect(url);
+    }
+    catch (error) {
+        console.error("Error during Google authentication:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+        });
+    }
+});
+exports.googleAuth = googleAuth;
+const googleAuthCallback = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { code } = req.query;
+        const { _id } = req.user;
+        if (!code || typeof code !== "string") {
+            return res
+                .status(400)
+                .json({ message: "Authorization code is required" });
+        }
+        const { tokens } = yield oauth2Client.getToken(code);
+        const { access_token, refresh_token, expiry_date } = tokens;
+        const updatedAuthToken = yield authToken_model_1.default.findOneAndUpdate({ user_object_id: _id }, {
+            $set: {
+                google: {
+                    access_token,
+                    refresh_token,
+                    expiry_date: new Date(expiry_date || 0).getTime(),
+                }
+            }
+        });
+        if (!updatedAuthToken) {
+            yield authToken_model_1.default.create({
+                user_object_id: _id,
+                google: {
+                    access_token,
+                    refresh_token,
+                    expiry_date: new Date(expiry_date || 0).getTime(),
+                },
+            });
+        }
+        oauth2Client.setCredentials(tokens);
+        res.json({ message: "Google authentication successful", tokens });
+    }
+    catch (error) {
+        console.error("Error during Google authentication callback:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+        });
+    }
+});
+exports.googleAuthCallback = googleAuthCallback;

@@ -1,0 +1,17 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.authTokenSchema = void 0;
+const mongoose_1 = require("mongoose");
+const schemaOption_1 = require("../../constants/model/schemaOption");
+const model_constant_1 = __importDefault(require("../../constants/model/model.constant"));
+exports.authTokenSchema = new mongoose_1.Schema({
+    user_object_id: model_constant_1.default.requiredObjectId,
+    google: {
+        access_token: model_constant_1.default.requiredString,
+        refresh_token: model_constant_1.default.requiredString,
+        expiry_date: model_constant_1.default.requiredNumber,
+    }
+}, Object.assign(Object.assign({}, schemaOption_1.GENERAL_SCHEMA_OPTIONS), { toJSON: { virtuals: true }, toObject: { virtuals: true } }));

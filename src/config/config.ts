@@ -12,6 +12,7 @@ export const jwtSecret = process.env.JWT_SECRET;
 
 export const OPEN_AI_API_KEY = process.env.OPEN_AI_API_KEY;
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+export const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
 export const RAG_CONFIG = {
   chunkSize: 1000, // Default chunk size in tokens

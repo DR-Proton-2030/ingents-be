@@ -6,4 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.upload = void 0;
 const multer_1 = __importDefault(require("multer"));
 const storage = multer_1.default.memoryStorage();
-exports.upload = (0, multer_1.default)({ storage: storage });
+exports.upload = (0, multer_1.default)({
+    storage: storage,
+    limits: {
+        fieldSize: 1000 * 1024 * 1024 // 1000MB
+    }
+});

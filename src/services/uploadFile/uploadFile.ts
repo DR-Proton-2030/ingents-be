@@ -26,3 +26,16 @@ export const uploadFileToS3Service = async (key: string, fileBuffer: Buffer, mim
 		console.error(err);
 	}
 };
+
+export const uploadBase64ToS3 = async (
+	base64: string,
+	key: string,
+	mimeType: string = "image/png"
+) => {
+	const match = base64.match(/^data:(.+);base64,(.+)$/);
+	const cleanedBase64 = match ? match[2] : base64;
+	const resolvedMimeType = match?.[1] ?? mimeType;
+	const buffer = Buffer.from(cleanedBase64, "base64");
+
+	return uploadFileToS3Service(key, buffer, resolvedMimeType);
+};
