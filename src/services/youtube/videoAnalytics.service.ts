@@ -105,7 +105,7 @@ const resolveVideoDateWindow = (args: {
     startDate = toYMD(lastMonthStartDate);
     endDate = end(toYMD(lastMonthEndDate));
   } else if (effectiveRange === "LIFETIME") {
-    startDate = publishedAtYMD || "2008-01-01";
+    startDate = publishedAtYMD || "2010-01-01";
     endDate = end(maxEnd);
   } else if (effectiveRange === "CUSTOM") {
     const cr = customRange || ({} as any);

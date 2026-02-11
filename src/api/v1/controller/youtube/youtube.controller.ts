@@ -14,9 +14,7 @@ import { fetchSingleVideoAnalytics } from "../../../../services/youtube/videoAna
 import { fetchChannelInfo } from "../../../../services/youtube/data/channel";
 import {
   getCustomWindow,
-  getTodayStr,
-  getLast48hStartStr,
-  getLast28dStartStr,
+  resolveYouTubeAnalyticsWindow,
 } from "../../../../services/youtube/utils/dates";
 import { paginateUploads } from "../../../../services/youtube/data/uploads";
 import {
@@ -493,16 +491,38 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
 
 export const getAllYoutubeVideos = async (req: Request, res: Response) => {
   try {
-    const { user_id } = req.query;
+    const userId =
+      (req.body?.userId as string) ||
+      (req.body?.user_id as string) ||
+      (req.query?.userId as string) ||
+      (req.query?.user_id as string);
 
-    if (!user_id) {
+    console.log("User id ", userId);
+
+    const asBool = (v: any) =>
+      v === true || v === 1 || v === "1" || String(v).toLowerCase() === "true";
+
+    const limitRaw = Number((req.query as any).limit);
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0
+        ? Math.min(Math.floor(limitRaw), 50)
+        : 50;
+    const pageToken =
+      typeof (req.query as any).pageToken === "string"
+        ? ((req.query as any).pageToken as string)
+        : typeof (req.query as any).page_token === "string"
+          ? ((req.query as any).page_token as string)
+          : undefined;
+    const allMode = asBool((req.query as any).all);
+
+    if (!userId) {
       return res.status(400).json({
         success: false,
         message: "User id required",
       });
     }
 
-    const user = await UserModel.findById(user_id);
+    const user = await UserModel.findById(userId);
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -563,18 +583,69 @@ export const getAllYoutubeVideos = async (req: Request, res: Response) => {
       duration?: string | null;
       privacyStatus?: string | null;
       tags?: string[] | null;
+      // More enriched fields
+      url?: string | null;
+      channelTitle?: string | null;
+      categoryId?: string | null;
+      liveBroadcastContent?: string | null;
+      madeForKids?: boolean | null;
+      licensedContent?: boolean | null;
+      topicCategories?: string[] | null;
     }> = [];
 
-    let pageToken: string | undefined = undefined;
+    let nextPageToken: string | null = null;
+    let prevPageToken: string | null = null;
 
-    do {
+    if (allMode) {
+      let cursor: string | undefined = undefined;
+      do {
+        const resp = await youtube.playlistItems.list({
+          part: ["snippet", "contentDetails"],
+          playlistId: uploadsPlaylistId,
+          maxResults: 50,
+          pageToken: cursor,
+        });
+        const data = resp.data as youtube_v3.Schema$PlaylistItemListResponse;
+        const items = data.items || [];
+        for (const item of items) {
+          allVideos.push({
+            id: item.contentDetails?.videoId || null,
+            title: item.snippet?.title || null,
+            description: item.snippet?.description || null,
+            publishedAt:
+              item.contentDetails?.videoPublishedAt ||
+              item.snippet?.publishedAt ||
+              null,
+            thumbnails: item.snippet?.thumbnails,
+            channelId: item.snippet?.channelId || null,
+            statistics: null,
+            duration: null,
+            privacyStatus: null,
+            tags: null,
+            url: item.contentDetails?.videoId
+              ? `https://www.youtube.com/watch?v=${item.contentDetails.videoId}`
+              : null,
+            channelTitle: item.snippet?.channelTitle || null,
+            categoryId: null,
+            liveBroadcastContent: null,
+            madeForKids: null,
+            licensedContent: null,
+            topicCategories: null,
+          });
+        }
+
+        cursor = data.nextPageToken || undefined;
+      } while (cursor);
+    } else {
       const resp = await youtube.playlistItems.list({
         part: ["snippet", "contentDetails"],
         playlistId: uploadsPlaylistId,
-        maxResults: 50,
+        maxResults: limit,
         pageToken,
       });
       const data = resp.data as youtube_v3.Schema$PlaylistItemListResponse;
+      nextPageToken = data.nextPageToken || null;
+      prevPageToken = (data as any).prevPageToken || null;
       const items = data.items || [];
       for (const item of items) {
         allVideos.push({
@@ -591,13 +662,20 @@ export const getAllYoutubeVideos = async (req: Request, res: Response) => {
           duration: null,
           privacyStatus: null,
           tags: null,
+          url: item.contentDetails?.videoId
+            ? `https://www.youtube.com/watch?v=${item.contentDetails.videoId}`
+            : null,
+          channelTitle: item.snippet?.channelTitle || null,
+          categoryId: null,
+          liveBroadcastContent: null,
+          madeForKids: null,
+          licensedContent: null,
+          topicCategories: null,
         });
       }
+    }
 
-      pageToken = data.nextPageToken || undefined;
-    } while (pageToken);
-
-    // Enrich with video details: statistics, contentDetails, status
+    // Enrich with video details: statistics, contentDetails, status, extra snippet fields
     const videoIds = allVideos
       .map((v) => v.id)
       .filter((id): id is string => !!id);
@@ -611,7 +689,13 @@ export const getAllYoutubeVideos = async (req: Request, res: Response) => {
     const detailsMap: Record<string, youtube_v3.Schema$Video> = {};
     for (const ids of idChunks) {
       const detailsResp = await youtube.videos.list({
-        part: ["snippet", "statistics", "contentDetails", "status"],
+        part: [
+          "snippet",
+          "statistics",
+          "contentDetails",
+          "status",
+          "topicDetails",
+        ],
         id: ids,
       });
       const details = (detailsResp.data.items ||
@@ -630,12 +714,36 @@ export const getAllYoutubeVideos = async (req: Request, res: Response) => {
         v.privacyStatus = d.status?.privacyStatus || null;
         // Prefer tags from detailed snippet if present
         v.tags = (d.snippet?.tags as string[] | undefined) || v.tags || null;
+
+        v.channelTitle =
+          (d.snippet as any)?.channelTitle || v.channelTitle || null;
+        v.categoryId = (d.snippet as any)?.categoryId || null;
+        v.liveBroadcastContent =
+          (d.snippet as any)?.liveBroadcastContent ||
+          v.liveBroadcastContent ||
+          null;
+        v.madeForKids = (d.status as any)?.madeForKids ?? null;
+        v.licensedContent = (d.contentDetails as any)?.licensedContent ?? null;
+        v.topicCategories =
+          ((d as any)?.topicDetails?.topicCategories as string[] | undefined) ||
+          null;
       }
     }
 
     return res.status(200).json({
       success: true,
       result: allVideos,
+      pagination: allMode
+        ? {
+            mode: "all",
+            total: allVideos.length,
+          }
+        : {
+            mode: "cursor",
+            limit,
+            nextPageToken,
+            prevPageToken,
+          },
     });
   } catch (error: any) {
     console.error("Error fetching videos:", error);
@@ -1236,13 +1344,66 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
     const { channelData, channelId, uploadsPlaylistId } =
       await fetchChannelInfo(youtube);
 
-    // 2. Dates for Analytics (configurable via ?days=)
-    // Date utilities
-    const daysParam = Number((req.query as any).days) || 30;
-    const { start: startDate, end: endDate } = getCustomWindow(daysParam);
-    const todayStr = getTodayStr();
-    const last48hStartStr = getLast48hStartStr();
-    const last28dStartStr = getLast28dStartStr();
+    // 2. Dates for Analytics (supports dateRange/customRange; never includes today)
+    const q: any = req.query || {};
+    const dateRange = (q.dateRange || q.date_range) as any;
+    const customStart =
+      (q.customStartDate as string) ||
+      (q.custom_start_date as string) ||
+      (q["customRange[startDate]"] as string);
+    const customEnd =
+      (q.customEndDate as string) ||
+      (q.custom_end_date as string) ||
+      (q["customRange[endDate]"] as string);
+
+    const hasExplicitRange =
+      !!dateRange || (customStart != null && customEnd != null);
+
+    const appliedFilter = hasExplicitRange
+      ? resolveYouTubeAnalyticsWindow({
+          dateRange,
+          customRange:
+            customStart && customEnd
+              ? { startDate: String(customStart), endDate: String(customEnd) }
+              : null,
+          days: null,
+          defaultRange: "LAST_28_DAYS",
+        })
+      : (() => {
+          const daysRaw = Number(q.days);
+          if (Number.isFinite(daysRaw) && daysRaw > 0) {
+            const w = getCustomWindow(daysRaw);
+            return {
+              dateRange: "CUSTOM",
+              start: w.start,
+              end: w.end,
+              customRange: { startDate: w.start, endDate: w.end },
+            } as any;
+          }
+          return resolveYouTubeAnalyticsWindow({
+            dateRange: undefined,
+            customRange: null,
+            days: null,
+            defaultRange: "LAST_28_DAYS",
+          });
+        })();
+
+    const startDate = (appliedFilter as any).start;
+    const endDate = (appliedFilter as any).end;
+
+    const shiftYmd = (ymd: string, days: number) => {
+      const [yy, mm, dd] = String(ymd)
+        .split("-")
+        .map((x) => Number(x));
+      const d = new Date(Date.UTC(yy, (mm || 1) - 1, dd || 1));
+      d.setUTCDate(d.getUTCDate() + days);
+      return d.toISOString().split("T")[0];
+    };
+
+    // Dashboard windows derived from endDate (yesterday max)
+    const todayStr = endDate;
+    const last48hStartStr = shiftYmd(endDate, -2);
+    const last28dStartStr = shiftYmd(endDate, -28);
 
     // 3. Parallel fetching of various data points
     // 3. YouTube Data API calls
@@ -1417,6 +1578,7 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
       );
 
     const result = {
+      appliedFilter,
       channel: {
         id: channelId,
         title: channelData.snippet?.title,
@@ -1908,8 +2070,9 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
 
     return res.status(200).json({ success: true, result });
   } catch (error: any) {
+    const status = Number(error?.statusCode) || 500;
     console.error("Error fetching all youtube details:", error);
-    return res.status(500).json({
+    return res.status(status).json({
       success: false,
       message: "Failed to fetch all youtube details",
       error: error.message,

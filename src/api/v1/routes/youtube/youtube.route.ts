@@ -30,7 +30,7 @@ youtubeRouter.post("/disconnect", disconnectYoutube);
 youtubeRouter.post("/upload-video", upload.single("video"), uploadYoutubeVideo);
 
 // Videos
-youtubeRouter.post("/videos", getAllYoutubeVideos);
+youtubeRouter.get("/videos", getAllYoutubeVideos);
 
 // Comments
 youtubeRouter.post("/comments", getVideoComments);
