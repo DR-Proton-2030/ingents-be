@@ -93,6 +93,7 @@ const postedContentSchema = new Schema<IPostedContent>(
 );
 
 // Index for efficient querying
+postedContentSchema.index({ platform_post_id: 1 });
 postedContentSchema.index({ user_id: 1, platform: 1 });
 postedContentSchema.index({ posted_at: -1 });
 postedContentSchema.index({ scheduled_post_id: 1 });
