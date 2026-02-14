@@ -42,7 +42,14 @@ const uploadRemoteUrlToS3 = async (
   url: string,
   keyPrefix: string
 ): Promise<string> => {
-  const response = await axios.get(url, { responseType: "arraybuffer" });
+  const secureUrl = url.startsWith("http://") ? url.replace("http://", "https://") : url;
+  const response = await axios.get(secureUrl, {
+    responseType: "arraybuffer",
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      Accept: "*/*",
+    },
+  });
   const mimeType = response.headers?.["content-type"] || "application/octet-stream";
   const buffer = Buffer.from(response.data);
   const uploaded = await uploadFileToS3Service(keyPrefix, buffer, mimeType);
