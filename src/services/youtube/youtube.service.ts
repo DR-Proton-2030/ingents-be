@@ -18,8 +18,12 @@ export const getAuthorizedClient = async (refreshToken: string) => {
   );
   client.setCredentials({ refresh_token: refreshToken });
   const accessTokenResponse = await client.getAccessToken();
+  const accessToken = accessTokenResponse?.token;
+  if (!accessToken) {
+    throw new Error("Failed to refresh YouTube access token");
+  }
   client.setCredentials({
-    access_token: accessTokenResponse?.token || refreshToken,
+    access_token: accessToken,
     refresh_token: refreshToken,
   });
   return {

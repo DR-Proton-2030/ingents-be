@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import axios from "axios";
 import { Types } from "mongoose";
 import {
   schedulePost,
@@ -10,6 +11,114 @@ import {
 } from "../../../../services/scheduler/scheduler.service";
 import PostedContentModel from "../../../../models/postedContent/postedContent.model";
 import ScheduledPostModel from "../../../../models/scheduledPost/scheduledPost.model";
+import { uploadFileToS3Service } from "../../../../services/uploadFile/uploadFile";
+import { s3Url } from "../../../../config/aws.config";
+
+const isHttpUrl = (url: string) => url.startsWith("http://") || url.startsWith("https://");
+
+const isS3Url = (url: string) => {
+  if (!s3Url) return false;
+  return url.startsWith(s3Url);
+};
+
+const uploadDataUrlToS3 = async (
+  dataUrl: string,
+  keyPrefix: string
+): Promise<string> => {
+  const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
+  if (!match) {
+    throw new Error("Invalid data URL format");
+  }
+  const mimeType = match[1];
+  const buffer = Buffer.from(match[2], "base64");
+  const uploaded = await uploadFileToS3Service(keyPrefix, buffer, mimeType);
+  if (!uploaded) {
+    throw new Error("Failed to upload media to S3");
+  }
+  return uploaded;
+};
+
+const uploadRemoteUrlToS3 = async (
+  url: string,
+  keyPrefix: string
+): Promise<string> => {
+  const response = await axios.get(url, { responseType: "arraybuffer" });
+  const mimeType = response.headers?.["content-type"] || "application/octet-stream";
+  const buffer = Buffer.from(response.data);
+  const uploaded = await uploadFileToS3Service(keyPrefix, buffer, mimeType);
+  if (!uploaded) {
+    throw new Error("Failed to upload media to S3");
+  }
+  return uploaded;
+};
+
+const parseMaybeArray = (value: any): string[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    } catch (_) {
+      return [value];
+    }
+  }
+  return [];
+};
+
+const parseMaybeJson = (value: any) => {
+  if (!value || typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return value;
+  }
+};
+
+const getUploadedMediaFile = (req: Request) => {
+  const files = (req as any).files as Record<string, Express.Multer.File[]> | undefined;
+  if (!files) return null;
+  return (
+    files.media?.[0] ||
+    files.image?.[0] ||
+    files.video?.[0] ||
+    null
+  );
+};
+
+const normalizeScheduledMediaUrls = async (
+  mediaUrls: string[] | undefined,
+  userId: string,
+  platform: string
+): Promise<string[]> => {
+  if (!mediaUrls || mediaUrls.length === 0) return [];
+  const keyPrefix = `scheduled_posts/${platform}/${userId}`;
+
+  const normalized: string[] = [];
+  for (const url of mediaUrls) {
+    if (!url) continue;
+    if (url.startsWith("blob:")) {
+      throw new Error(
+        "Blob URLs cannot be scheduled. Upload media to S3 first or send a data URL."
+      );
+    }
+    if (isS3Url(url)) {
+      normalized.push(url);
+      continue;
+    }
+    if (url.startsWith("data:")) {
+      normalized.push(await uploadDataUrlToS3(url, keyPrefix));
+      continue;
+    }
+    if (isHttpUrl(url)) {
+      normalized.push(await uploadRemoteUrlToS3(url, keyPrefix));
+      continue;
+    }
+    normalized.push(url);
+  }
+
+  return normalized;
+};
 
 /**
  * Schedule a new social media post
@@ -28,6 +137,23 @@ export const createScheduledPost = async (req: Request, res: Response) => {
       channel_id,
       platform_specific_data,
     } = req.body;
+
+    const parsedMediaUrls = parseMaybeArray(media_urls);
+    const parsedHashtags = parseMaybeArray(hashtags);
+    const parsedPlatformSpecificData = parseMaybeJson(platform_specific_data) || {};
+    const uploadedFile = getUploadedMediaFile(req);
+    let uploadedFileUrl: string | null | undefined = null;
+    if (uploadedFile) {
+      const keyPrefix = `scheduled_posts/${platform}/${user_id}`;
+      uploadedFileUrl = await uploadFileToS3Service(
+        keyPrefix,
+        uploadedFile.buffer,
+        uploadedFile.mimetype || "application/octet-stream"
+      );
+      if (!uploadedFileUrl) {
+        throw new Error("Failed to upload media to S3");
+      }
+    }
 
     // Validation
     if (!user_id || !platform || !content || !scheduled_at) {
@@ -63,31 +189,44 @@ export const createScheduledPost = async (req: Request, res: Response) => {
       });
     }
 
-    if (platform === "instagram" && (!media_urls || media_urls.length === 0)) {
+    if (platform === "instagram" && (!parsedMediaUrls.length && !uploadedFile)) {
       return res.status(400).json({
         success: false,
         message: "Instagram requires at least one media URL",
       });
     }
 
-    if (platform === "youtube" && (!media_urls || media_urls.length === 0)) {
+    if (platform === "youtube" && (!parsedMediaUrls.length && !uploadedFile)) {
       return res.status(400).json({
         success: false,
         message: "YouTube requires a video URL",
       });
     }
 
+    const filteredMediaUrls = uploadedFileUrl
+      ? parsedMediaUrls.filter((url) => !url.startsWith("blob:"))
+      : parsedMediaUrls;
+
+    const normalizedMediaUrls = await normalizeScheduledMediaUrls(
+      filteredMediaUrls,
+      user_id,
+      platform
+    );
+    const finalMediaUrls = uploadedFileUrl
+      ? [uploadedFileUrl, ...normalizedMediaUrls.filter((u) => u !== uploadedFileUrl)]
+      : normalizedMediaUrls;
+
     const scheduledPost = await schedulePost({
       user_id: new Types.ObjectId(user_id),
       platform,
       content,
-      media_urls: media_urls || [],
+      media_urls: finalMediaUrls,
       media_type: media_type || "text",
-      hashtags: hashtags || [],
+      hashtags: parsedHashtags,
       scheduled_at: scheduledDate,
       page_id,
       channel_id,
-      platform_specific_data: platform_specific_data || {},
+      platform_specific_data: parsedPlatformSpecificData,
     });
 
     return res.status(201).json({
@@ -97,9 +236,15 @@ export const createScheduledPost = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error scheduling post:", error);
-    return res.status(500).json({
+    const message = error.message || "Failed to schedule post";
+    const status =
+      message.includes("Blob URLs cannot be scheduled") ||
+      message.includes("Invalid data URL")
+        ? 400
+        : 500;
+    return res.status(status).json({
       success: false,
-      message: error.message || "Failed to schedule post",
+      message,
     });
   }
 };
@@ -435,17 +580,28 @@ export const createBulkScheduledPosts = async (req: Request, res: Response) => {
           platform_specific_data,
         } = postData;
 
+        const parsedMediaUrls = parseMaybeArray(media_urls);
+        const parsedHashtags = parseMaybeArray(hashtags);
+        const parsedPlatformSpecificData =
+          parseMaybeJson(platform_specific_data) || {};
+
+        const normalizedMediaUrls = await normalizeScheduledMediaUrls(
+          parsedMediaUrls,
+          user_id,
+          platform
+        );
+
         const scheduledPost = await schedulePost({
           user_id: new Types.ObjectId(user_id),
           platform,
           content,
-          media_urls: media_urls || [],
+          media_urls: normalizedMediaUrls,
           media_type: media_type || "text",
-          hashtags: hashtags || [],
+          hashtags: parsedHashtags,
           scheduled_at: new Date(scheduled_at),
           page_id,
           channel_id,
-          platform_specific_data: platform_specific_data || {},
+          platform_specific_data: parsedPlatformSpecificData,
         });
 
         results.success.push(scheduledPost);
@@ -464,9 +620,15 @@ export const createBulkScheduledPosts = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error("Error bulk scheduling posts:", error);
-    return res.status(500).json({
+    const message = error.message || "Failed to schedule posts";
+    const status =
+      message.includes("Blob URLs cannot be scheduled") ||
+      message.includes("Invalid data URL")
+        ? 400
+        : 500;
+    return res.status(status).json({
       success: false,
-      message: error.message || "Failed to schedule posts",
+      message,
     });
   }
 };

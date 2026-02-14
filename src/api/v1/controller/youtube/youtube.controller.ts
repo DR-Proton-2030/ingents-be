@@ -97,7 +97,7 @@ export const youtubeAuth = (req: Request, res: Response) => {
 
 export const youtubeCallback = async (req: Request, res: Response) => {
   const { code, state } = req.query;
-  console.log("Code and state <=======>", code, state);
+  console.log("YouTube OAuth callback received");
 
   if (!state || typeof state !== "string") {
     return res.status(400).json({
@@ -130,8 +130,7 @@ export const youtubeCallback = async (req: Request, res: Response) => {
   try {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
-    console.log("Access Token:", tokens.access_token);
-    console.log("Refresh Token:", tokens.refresh_token);
+    console.log("YouTube OAuth tokens received");
     if (user_id) {
       const updateData: any = {};
       if (tokens.refresh_token) {
@@ -325,19 +324,19 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
       });
     }
 
-    // Setup OAuth client
-    oauth2Client.setCredentials({
-      refresh_token: user.youtube.access_token,
-    });
-
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    let youtube: youtube_v3.Youtube;
+    try {
+      ({ youtube } = await getAuthorizedClient(user.youtube.access_token));
+    } catch (authErr: any) {
+      return res.status(403).json({
+        success: false,
+        message: "Failed to authorize YouTube client. Reconnect YouTube.",
+        error:
+          authErr?.response?.data?.error?.message ||
+          authErr?.message ||
+          "Authorization failed",
+      });
+    }
 
     let videoStream: any;
     if (req.file) {

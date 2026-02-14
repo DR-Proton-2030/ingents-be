@@ -11,11 +11,20 @@ import {
   getSchedulerQueueStatus,
   createBulkScheduledPosts,
 } from "../../controller/scheduler/scheduler.controller";
+import { upload } from "../../middlewares/helper/multer/multer.middleware";
 
 const schedulerRouter = Router();
 
 // Scheduled Posts Routes
-schedulerRouter.post("/schedule", createScheduledPost);
+schedulerRouter.post(
+  "/schedule",
+  upload.fields([
+    { name: "media", maxCount: 1 },
+    { name: "image", maxCount: 1 },
+    { name: "video", maxCount: 1 },
+  ]),
+  createScheduledPost
+);
 schedulerRouter.post("/schedule/bulk", createBulkScheduledPosts);
 schedulerRouter.get("/scheduled/:userId", getUserScheduledPosts);
 schedulerRouter.get("/scheduled/post/:postId", getScheduledPostById);

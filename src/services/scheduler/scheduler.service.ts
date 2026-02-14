@@ -16,6 +16,23 @@ let isRedisAvailable = false;
 let socialMediaQueue: Queue<SocialMediaJobData> | null = null;
 let queueEvents: QueueEvents | null = null;
 
+const extractErrorMessage = (error: any) => {
+  const status = error?.response?.status;
+  const data = error?.response?.data;
+  const apiMessage =
+    data?.error?.message ||
+    data?.message ||
+    error?.errors?.[0]?.message ||
+    (typeof data === "string" ? data : null);
+  const apiReason = data?.error?.errors?.[0]?.reason || error?.errors?.[0]?.reason;
+  const parts: string[] = [];
+  if (status) parts.push(`status=${status}`);
+  if (apiMessage) parts.push(`api=${apiMessage}`);
+  if (apiReason) parts.push(`reason=${apiReason}`);
+  if (error?.message) parts.push(`message=${error.message}`);
+  return parts.join(" | ") || "Unknown error";
+};
+
 // Initialize Queue lazily
 const getQueue = (): Queue<SocialMediaJobData> | null => {
   if (!isRedisAvailable) return null;
@@ -46,7 +63,8 @@ export const schedulePost = async (
 
   // Only schedule if delay is positive (future time) and Redis is available
   const queue = getQueue();
-  if (delay > 0 && queue) {
+  if (queue) {
+    const effectiveDelay = Math.max(0, delay);
     const job = await queue.add(
       "post",
       {
@@ -62,7 +80,7 @@ export const schedulePost = async (
         platformSpecificData: postData.platform_specific_data,
       },
       {
-        delay,
+        delay: effectiveDelay,
         jobId: scheduledPost._id!.toString(),
       }
     );
@@ -73,12 +91,6 @@ export const schedulePost = async (
     });
 
     scheduledPost.job_id = job.id;
-  } else if (delay <= 0) {
-    // If scheduled time is in the past, mark as failed
-    await ScheduledPostModel.findByIdAndUpdate(scheduledPost._id, {
-      status: "failed",
-      error_message: "Scheduled time is in the past",
-    });
   }
   // If Redis not available, post stays in pending state in DB
 
@@ -313,13 +325,14 @@ export const processPostJob = async (job: Job<SocialMediaJobData>): Promise<any>
 
     return { success: true, platformResponse };
   } catch (error: any) {
+    const errorMessage = extractErrorMessage(error);
     // Update scheduled post with error
     const retryCount = (job.attemptsMade || 0) + 1;
     const maxRetries = job.opts.attempts || 3;
 
     await ScheduledPostModel.findByIdAndUpdate(scheduledPostId, {
       status: retryCount >= maxRetries ? "failed" : "pending",
-      error_message: error.message,
+      error_message: errorMessage,
       retry_count: retryCount,
     });
 
@@ -335,11 +348,49 @@ export const processPostJob = async (job: Job<SocialMediaJobData>): Promise<any>
         posted_at: new Date(),
         is_scheduled: true,
         status: "failed",
-        error_message: error.message,
+        error_message: errorMessage,
       });
     }
 
     throw error;
+  }
+};
+
+const enqueuePendingScheduledPosts = async (queue: Queue<SocialMediaJobData>) => {
+  const pendingPosts = await ScheduledPostModel.find({
+    status: "pending",
+    $or: [{ job_id: null }, { job_id: "" }],
+  }).sort({ scheduled_at: 1 });
+
+  for (const post of pendingPosts) {
+    const jobId = post._id?.toString();
+    if (!jobId) continue;
+
+    const existingJob = await queue.getJob(jobId);
+    if (existingJob) continue;
+
+    const delay = Math.max(0, post.scheduled_at.getTime() - Date.now());
+
+    const job = await queue.add(
+      "post",
+      {
+        scheduledPostId: jobId,
+        platform: post.platform,
+        userId: post.user_id.toString(),
+        content: post.content,
+        mediaUrls: post.media_urls,
+        mediaType: post.media_type,
+        hashtags: post.hashtags,
+        pageId: post.page_id,
+        channelId: post.channel_id,
+        platformSpecificData: post.platform_specific_data,
+      },
+      { delay, jobId }
+    );
+
+    await ScheduledPostModel.findByIdAndUpdate(post._id, {
+      job_id: job.id,
+    });
   }
 };
 
@@ -382,6 +433,8 @@ export const initializeWorker = async (): Promise<Worker<SocialMediaJobData> | n
           queueEvents = new QueueEvents(QUEUE_NAMES.SOCIAL_MEDIA_POST, {
             connection: REDIS_CONFIG,
           });
+
+          await enqueuePendingScheduledPosts(socialMediaQueue);
 
           const worker = new Worker<SocialMediaJobData>(
             QUEUE_NAMES.SOCIAL_MEDIA_POST,

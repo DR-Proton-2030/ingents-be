@@ -1,5 +1,5 @@
 import axios from "axios";
-import UserModel from "../../models/users/users.model";
+import { getPageTokenService } from "./facebook.service";
 
 const FACEBOOK_GRAPH_URL = "https://graph.facebook.com";
 
@@ -21,24 +21,8 @@ export const postToFacebook = async ({
   mediaUrls,
   hashtags,
 }: PostToFacebookParams) => {
-  // Get user and page access token
-  const user = await UserModel.findById(userId).exec();
-  if (!user || !user.facebook?.access_token) {
-    throw new Error("Facebook user access token not found");
-  }
-
-  const userAccessToken = user.facebook.access_token;
-
   // Get page access token
-  const pagesRes = await axios.get(
-    `${FACEBOOK_GRAPH_URL}/v20.0/me/accounts?access_token=${userAccessToken}`
-  );
-  const pageData = pagesRes.data?.data?.find((p: any) => p.id === pageId);
-  if (!pageData) {
-    throw new Error("Page not found or user is not admin of this page");
-  }
-
-  const pageAccessToken = pageData.access_token;
+  const { pageAccessToken } = await getPageTokenService(userId, pageId);
 
   // Append hashtags to message
   let fullMessage = message;
