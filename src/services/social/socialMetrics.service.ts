@@ -1,8 +1,4 @@
-import axios from "axios";
-import UserModel from "../../models/users/users.model";
-import { getPageTokenService } from "../facebook/facebook.service";
-import { getAuthorizedClient } from "../youtube/youtube.service";
-import { getXUserProfile, refreshXToken } from "../x/x.service";
+import SocialDataModel from "../../models/socialData/socialData.model";
 
 export async function fetchSocialMetrics(userId: string): Promise<{
   items: Array<{
@@ -12,225 +8,71 @@ export async function fetchSocialMetrics(userId: string): Promise<{
   }>;
   errors?: Array<{ platform: string; message: string }>;
 }> {
-  const errors: Array<{ platform: string; message: string }> = [];
   const items: Array<{
     platform: string;
     metric: "followers" | "subscribers";
     count: number;
   }> = [];
+  const errors: Array<{ platform: string; message: string }> = [];
 
-  // Load user for tokens once
-  const user = await UserModel.findById(userId).exec();
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  // Facebook followers (fan_count from Page)
   try {
-    if (user.facebook?.access_token) {
-      // Prefer a specifically connected page if recorded
-      const preferredPageId = user.facebook?.project_id || undefined;
-      if (preferredPageId) {
-        try {
-          const { pageAccessToken, id } = await getPageTokenService(
-            userId,
-            preferredPageId,
-          );
-          const pageDetails = await axios.get(
-            `https://graph.facebook.com/v20.0/${id}?fields=fan_count`,
-            { headers: { Authorization: `Bearer ${pageAccessToken}` } },
-          );
-          const fanCount = Number(pageDetails.data?.fan_count || 0);
-          items.push({
-            platform: "facebook",
-            metric: "followers",
-            count: fanCount,
-          });
-        } catch (prefErr) {
-          // Fall back to scanning all pages if preferred lookup fails
-          const pagesResp = await axios.get(
-            `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token&access_token=${user.facebook.access_token}`,
-          );
-          const pages = pagesResp.data?.data || [];
-          if (!pages.length) {
-            items.push({ platform: "facebook", metric: "followers", count: 0 });
-          } else {
-            const counts = await Promise.all(
-              pages.slice(0, 10).map(async (p: any) => {
-                try {
-                  const resp = await axios.get(
-                    `https://graph.facebook.com/v20.0/${p.id}?fields=fan_count`,
-                    { headers: { Authorization: `Bearer ${p.access_token}` } },
-                  );
-                  return Number(resp.data?.fan_count || 0);
-                } catch (_) {
-                  return 0;
-                }
-              }),
-            );
-            const maxCount = counts.reduce((a, b) => (b > a ? b : a), 0);
-            items.push({
-              platform: "facebook",
-              metric: "followers",
-              count: maxCount,
-            });
-          }
-        }
-      } else {
-        // Fetch all managed pages and use the one with the highest fan_count
-        const pagesResp = await axios.get(
-          `https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token&access_token=${user.facebook.access_token}`,
-        );
-        const pages = pagesResp.data?.data || [];
-        if (!pages.length) {
-          items.push({ platform: "facebook", metric: "followers", count: 0 });
-        } else {
-          const counts = await Promise.all(
-            pages.slice(0, 10).map(async (p: any) => {
-              try {
-                const resp = await axios.get(
-                  `https://graph.facebook.com/v20.0/${p.id}?fields=fan_count`,
-                  { headers: { Authorization: `Bearer ${p.access_token}` } },
-                );
-                return Number(resp.data?.fan_count || 0);
-              } catch (_) {
-                return 0;
-              }
-            }),
-          );
-          const maxCount = counts.reduce((a, b) => (b > a ? b : a), 0);
-          items.push({
-            platform: "facebook",
-            metric: "followers",
-            count: maxCount,
-          });
-        }
-      }
-    } else {
-      // Graceful fallback: return zero followers without raising an error
-      items.push({ platform: "facebook", metric: "followers", count: 0 });
-    }
-  } catch (fbErr: any) {
-    const status = fbErr?.response?.status;
-    let message =
-      fbErr?.response?.data?.error?.message ||
-      fbErr?.message ||
-      "Failed to fetch Facebook followers";
-    if (status === 401) message = "Invalid or expired Facebook access token";
-    else if (status === 403)
-      message = "Insufficient Facebook permissions to access pages";
-    else if (status === 429) message = "Facebook rate limit exceeded";
-    errors.push({ platform: "facebook", message });
-  }
+    // Fetch all social data records for the user from the database
+    const allSocialData = await SocialDataModel.find({
+      user_object_id: userId,
+    }).exec();
 
-  // YouTube subscribers
-  try {
-    const ytToken = user.youtube?.access_token;
-    if (ytToken) {
-      const { youtube } = await getAuthorizedClient(ytToken);
-      const { data } = await youtube.channels.list({
-        part: ["statistics"],
-        mine: true,
-      });
-      const stats = data.items?.[0]?.statistics;
-      const subsStr = stats?.subscriberCount;
-      const hidden = (stats as any)?.hiddenSubscriberCount === true;
-      if (hidden) {
-        errors.push({
-          platform: "youtube",
-          message: "Subscriber count hidden by channel settings",
-        });
-      }
-      if (subsStr == null) {
-        errors.push({
-          platform: "youtube",
-          message: "Subscriber count unavailable (may be hidden)",
-        });
-      }
-      if (!hidden) {
-        const subs = subsStr ? Number(subsStr) : 0;
-        items.push({ platform: "youtube", metric: "subscribers", count: subs });
-      }
-    } else {
-      errors.push({
-        platform: "youtube",
-        message: "Missing YouTube refresh token",
-      });
-    }
-  } catch (ytErr: any) {
-    const status = ytErr?.response?.status;
-    let message =
-      ytErr?.response?.data?.error?.message ||
-      ytErr?.message ||
-      "Failed to fetch YouTube subscribers";
-    if (status === 401) message = "Invalid or expired YouTube token";
-    else if (status === 403)
-      message = "YouTube access forbidden (check scopes/permissions)";
-    else if (status === 429) message = "YouTube rate limit exceeded";
-    errors.push({ platform: "youtube", message });
-  }
+    // Map each platform's data to the requested metrics format
+    for (const doc of allSocialData) {
+      let count = 0;
+      let metric: "followers" | "subscribers" = "followers";
 
-  // X followers
-  try {
-    const xAccessToken = user.x?.access_token;
-    if (xAccessToken) {
-      // Prefer the authenticated user via access token
-      let profile: any;
       try {
-        profile = await getXUserProfile(xAccessToken);
-      } catch (innerErr: any) {
-        const status = innerErr?.response?.status;
-        const hasRefresh = Boolean(user.x?.refresh_token);
-        if (status === 401 && hasRefresh) {
-          // Attempt a one-time refresh and retry
-          try {
-            const tokens = await refreshXToken(userId);
-            profile = await getXUserProfile(tokens.access_token);
-          } catch (refreshErr: any) {
-            const rStatus = refreshErr?.response?.status;
-            let message =
-              refreshErr?.response?.data?.error ||
-              refreshErr?.message ||
-              "Failed to refresh X token";
-            if (rStatus === 401) message = "Invalid X refresh token";
-            else if (rStatus === 403)
-              message = "X refresh forbidden (check app scopes)";
-            else if (rStatus === 429)
-              message = "X rate limit exceeded during refresh";
-            errors.push({ platform: "x", message });
+        if (doc.platform_name === "youtube") {
+          // YouTube subscribers are stored in channel statistics
+          count = Number(doc.data?.channel?.statistics?.subscriberCount || 0);
+          metric = "subscribers";
+        } else if (doc.platform_name === "facebook") {
+          // Facebook followers are typically stored in fan_count or followers_count
+          count = Number(
+            doc.data?.page?.fan_count || doc.data?.page?.followers_count || 0,
+          );
+          metric = "followers";
+        } else if (doc.platform_name === "x") {
+          // X (Twitter) followers are in public_metrics
+          count = Number(doc.data?.public_metrics?.followers_count || 0);
+          metric = "metric" in (doc.data || {}) ? doc.data.metric : "followers"; // fallback for different possible structures
+          if (doc.data?.public_metrics?.followers_count !== undefined) {
+             count = Number(doc.data.public_metrics.followers_count);
+          } else if (typeof doc.data === 'number') {
+             count = doc.data;
           }
-        } else {
-          // Bubble up original error if not refreshable
-          throw innerErr;
+          metric = "followers";
+        } else if (doc.platform_name === "instagram") {
+          // Instagram followers
+          count = Number(
+            doc.data?.followers_count || doc.data?.business_discovery?.followers_count || 0,
+          );
+          metric = "followers";
         }
-      }
 
-      if (profile) {
-        const followersRaw = profile?.public_metrics?.followers_count;
-        if (followersRaw == null) {
-          errors.push({
-            platform: "x",
-            message:
-              "Followers count unavailable from X API (check app access and scopes)",
-          });
-        }
-        const followers = followersRaw != null ? Number(followersRaw) : 0;
-        items.push({ platform: "x", metric: "followers", count: followers });
+        items.push({
+          platform: doc.platform_name,
+          metric,
+          count,
+        });
+      } catch (innerErr: any) {
+        errors.push({
+          platform: doc.platform_name,
+          message: `Error parsing data from database: ${innerErr.message}`,
+        });
       }
-    } else {
-      errors.push({ platform: "x", message: "Missing X access token" });
     }
-  } catch (xErr: any) {
-    const status = xErr?.response?.status;
-    let message =
-      xErr?.response?.data?.error ||
-      xErr?.message ||
-      "Failed to fetch X followers";
-    if (status === 401) message = "Invalid or expired X (Twitter) access token";
-    else if (status === 403) message = "X access forbidden (check app scopes)";
-    else if (status === 429) message = "X rate limit exceeded";
-    errors.push({ platform: "x", message });
+
+  1} catch (err: any) {
+    console.error("fetchSocialMetrics error:", err);
+    throw new Error(`Failed to fetch social metrics from database: ${err.message}`);
   }
 
   return { items, errors };
 }
+
