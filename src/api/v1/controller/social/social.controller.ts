@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { fetchSocialMetrics } from "../../../../services/social/socialMetrics.service";
 import { fetchAndStoreYoutubeData, getSnapshot as getYoutubeSnapshot } from "../../../../services/youtube/snapshot.service";
 import { fetchAndStoreFacebookData, getSnapshot as getFacebookSnapshot } from "../../../../services/facebook/snapshot.service";
+import { updateFbAllPostsEngagement } from "../../../../services/facebook/content.service";
 
 export const getSocialMetrics = async (req: Request, res: Response) => {
   try {
@@ -92,6 +93,14 @@ export const syncFacebook = async (req: Request, res: Response) => {
     }
 
     const data = await fetchAndStoreFacebookData(userId, pageId);
+
+    // Also update engagement for all existing Facebook posts in our database
+    try {
+      await updateFbAllPostsEngagement(userId);
+    } catch (engagementErr: any) {
+      console.error("Error updating Facebook post engagement during sync:", engagementErr.message);
+      // We don't fail the whole sync if only engagement update fails
+    }
 
     if (data) {
       console.log("Facebook data synchronized successfully", data);

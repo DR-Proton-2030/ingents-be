@@ -22,25 +22,25 @@ export const fetchAndStoreFacebookData = async (userId: string, pageId: string) 
       "28d",
     );
 
-    // Update engagement for posted content if available
-    if (resultData.content?.publishedContent) {
-      await Promise.all(
-        resultData.content.publishedContent.map(async (item: any) => {
-          if (item.type === "video" && item.views !== undefined) {
-             await PostedContentModel.findOneAndUpdate(
-              { platform_post_id: item.id, platform: "facebook", user_id: userId },
-              {
-                $set: {
-                  engagement: {
-                    views: Number(item.views || 0),
-                  },
-                },
-              },
-            );
-          }
-        })
-      );
-    }
+    // // Update engagement for posted content if available
+    // if (resultData.content?.publishedContent) {
+    //   await Promise.all(
+    //     resultData.content.publishedContent.map(async (item: any) => {
+    //       if (item.type === "video" && item.views !== undefined) {
+    //          await PostedContentModel.findOneAndUpdate(
+    //           { platform_post_id: item.id, platform: "facebook", user_id: userId },
+    //           {
+    //             $set: {
+    //               engagement: {
+    //                 views: Number(item.views || 0),
+    //               },
+    //             },
+    //           },
+    //         );
+    //       }
+    //     })
+    //   );
+    // }
 
     // Update snapshot in SocialDataModel
     await SocialDataModel.findOneAndUpdate(
