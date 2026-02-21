@@ -10,7 +10,7 @@ import {
 import UserModel from "../../../../models/users/users.model";
 import PostedContentModel from "../../../../models/postedContent/postedContent.model";
 
-export const instagrmaLogin = (req: Request, res: Response) => {
+export const instagramLogin = (req: Request, res: Response) => {
   const { user_id } = req.query;
   console.log("user_id", user_id);
   if (!user_id) return res.status(400).json({ error: "Client ID is required" });
@@ -30,9 +30,25 @@ export const instagramAuthCallback = async (req: Request, res: Response) => {
 
     console.log("====>state : ", state);
     const userId = state ? atob(state as string) : null;
+
+    if (userId) {
+      try {
+        const profile = await getInstagramProfile(tokens.access_token);
+        await UserModel.findByIdAndUpdate(userId, {
+          $set: {
+            "instagram.project_id": profile.id,
+            "instagram.name":  profile.username,
+            "instagram.access_token": tokens.access_token,
+          },
+        });
+      } catch (profileError) {
+        console.error("Failed to store Instagram profile details:", profileError);
+      }
+    }
+
     // Redirect to frontend with token & pages as query params
     res.redirect(
-      `http://localhost:3000/dashboard/social-media?platform=instagram&token=${tokens.access_token}&user_id=${userId}`
+      `${process.env.FRONTEND_URL}/dashboard/social-media?platform=instagram&token=${tokens.access_token}&user_id=${userId}`
     );
   } catch (error) {
     console.error("OAuth authentication failed:", error);
@@ -70,7 +86,7 @@ export const fetchInstagramProfileController = async (
     console.log(savedUser);
     res.status(200).json({
       success: true,
-      user: savedUser,
+      // user: savedUser,
       result: profile,
     });
   } catch (error: any) {

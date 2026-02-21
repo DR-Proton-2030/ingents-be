@@ -3,6 +3,7 @@ import socialDataSchema from "./socialData.schema";
 import { ISocialData } from "../../types/interface/socialData.interface";
 import { youtubeMetricsSchema } from "./youtube/youtubeData.schema";
 import { facebookMetricsSchema } from "./facebook/facebookData.schema";
+import { instagramMetricsSchema } from "./instagram/instagramData.schema";
 
 const SocialDataModel = model<ISocialData>("social_data", socialDataSchema);
 
@@ -14,10 +15,16 @@ SocialDataModel.discriminator(
   new Schema({ data: youtubeMetricsSchema }, { _id: false })
 );
 
-// // Facebook strict schema
+// Facebook strict schema
 SocialDataModel.discriminator(
   "facebook",
   new Schema({ data: facebookMetricsSchema }, { _id: false })
+);
+
+// Instagram strict schema
+SocialDataModel.discriminator(
+  "instagram",
+  new Schema({ data: instagramMetricsSchema }, { _id: false })
 );
 
 export default SocialDataModel;

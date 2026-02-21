@@ -2,7 +2,7 @@ import axios from "axios";
 import dotenv from "dotenv";
 import { InstagramPostParams } from "../../types/interface/instagramService.interface";
 
-dotenv.config();
+dotenv.config({ override: true });
 
 const INSTAGRAM_CLIENT_ID = process.env.INSTAGRAM_CLIENT_ID!;
 const INSTAGRAM_CLIENT_SECRET = process.env.INSTAGRAM_CLIENT_SECRET!;
@@ -65,16 +65,13 @@ export const getInstagramProfile = async (accessToken: string) => {
   try {
     const url = `https://graph.instagram.com/me`;
     const params = {
-      fields: "id,username",
+      fields: "id,username,name,account_type,profile_picture_url,followers_count,follows_count,media_count",
       access_token: accessToken,
     };
 
     const { data } = await axios.get(url, { params });
 
-    return {
-      id: data.id,
-      name: data.username,
-    };
+    return data;
   } catch (error: any) {
     console.error(
       "Error fetching Instagram profile:",

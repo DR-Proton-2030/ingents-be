@@ -50,7 +50,7 @@ export async function fetchSocialMetrics(userId: string): Promise<{
         } else if (doc.platform_name === "instagram") {
           // Instagram followers
           count = Number(
-            doc.data?.followers_count || doc.data?.business_discovery?.followers_count || 0,
+            doc.data?.overview?.followersCount || doc.data?.business_discovery?.followers_count || 0,
           );
           metric = "followers";
         }

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { fetchSocialMetrics } from "../../../../services/social/socialMetrics.service";
 import { fetchAndStoreYoutubeData, getSnapshot as getYoutubeSnapshot } from "../../../../services/youtube/snapshot.service";
 import { fetchAndStoreFacebookData, getSnapshot as getFacebookSnapshot } from "../../../../services/facebook/snapshot.service";
+import { fetchAndStoreInstagramData, getSnapshot as getInstagramSnapshot } from "../../../../services/instagram/snapshot.service";
 import { updateFbAllPostsEngagement } from "../../../../services/facebook/content.service";
 
 export const getSocialMetrics = async (req: Request, res: Response) => {
@@ -174,6 +175,69 @@ export const getFacebookDashboard = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Internal server error during Facebook dashboard retrieval",
+    });
+  }
+};
+
+/**
+ * Sync Instagram data for a user
+ */
+export const syncInstagram = async (req: Request, res: Response) => {
+  try {
+    const userId = (req.query.user_id as string) || (req.query.userId as string);
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "user_id is required", // project_id/igUserId is stored in UserModel
+      });
+    }
+
+    const data = await fetchAndStoreInstagramData(userId);
+
+    if (data) {
+      console.log("Instagram data synchronized successfully", data);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Instagram data synchronized successfully",
+      result: data,
+    });
+  } catch (error: any) {
+    console.error("Error in syncInstagram controller:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error during Instagram sync",
+    });
+  }
+};
+
+/**
+ * Get Instagram dashboard data for a user
+ */
+export const getInstagramDashboard = async (req: Request, res: Response) => {
+  try {
+    const userId = (req.query.user_id as string) || (req.query.userId as string);
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "user_id is required",
+      });
+    }
+
+    const data = await getInstagramSnapshot(userId);
+
+    return res.status(200).json({
+      success: true,
+      result: data,
+    });
+  } catch (error: any) {
+    console.error("Error in getInstagramDashboard controller:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error during Instagram dashboard retrieval",
     });
   }
 };

@@ -65,6 +65,7 @@ app.use("/api/v1/sent-emails", sentEmailRouter);
 app.use("/api/v1/email-templates", emailTemplateRouter);
 app.use("/api/v1/facebook", Facebookrouter);
 app.use("/api/v1/ig", instagramRouter);
+app.use("/api/v1/instagram", instagramRouter); // Added as an alternative to match possible dev portal configuration
 app.use("/api/v1/youtube", youtubeRouter);
 app.use("/api/v1/x", xRouter);
 app.use("/api/v1/bank", bankRouter);
