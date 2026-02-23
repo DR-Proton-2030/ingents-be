@@ -56,7 +56,7 @@ export const postToInstagram = async ({
   }
 
   const createContainerRes = await axios.post(
-    `https://graph.facebook.com/v18.0/${igUserId}/media`,
+    `https://graph.instagram.com/v18.0/${igUserId}/media`,
     containerPayload,
     {
       headers: {
@@ -78,7 +78,7 @@ export const postToInstagram = async ({
       await new Promise((resolve) => setTimeout(resolve, 10000)); // Wait 10 seconds
 
       const statusRes = await axios.get(
-        `https://graph.facebook.com/v18.0/${containerId}?fields=status_code`,
+        `https://graph.instagram.com/v18.0/${containerId}?fields=status_code`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -97,7 +97,7 @@ export const postToInstagram = async ({
 
   // Publish the media
   const publishRes = await axios.post(
-    `https://graph.facebook.com/v18.0/${igUserId}/media_publish`,
+    `https://graph.instagram.com/v18.0/${igUserId}/media_publish`,
     {
       creation_id: containerId,
     },

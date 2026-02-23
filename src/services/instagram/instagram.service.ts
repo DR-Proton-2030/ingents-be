@@ -112,20 +112,25 @@ export const createInstagramMedia = async ({
   accessToken,
   igUserId,
   imageUrl,
+  videoUrl,
   caption,
   mediaType = "IMAGE",
 }: InstagramPostParams) => {
-  if (!imageUrl) {
-    throw new Error("imageUrl is required to create a media container");
+  if (!imageUrl && !videoUrl) {
+    throw new Error("imageUrl or videoUrl is required to create a media container");
   }
 
   try {
-    const url = `https://graph.facebook.com/v18.0/${igUserId}/media`;
-    const body = {
-      image_url: imageUrl,
+    const url = `https://graph.instagram.com/v18.0/${igUserId}/media`;
+    const body: any = {
       caption,
       media_type: mediaType,
     };
+    if (mediaType === "VIDEO" || mediaType === "REELS") {
+      body.video_url = videoUrl || imageUrl;
+    } else {
+      body.image_url = imageUrl;
+    }
 
     const { data } = await axios.post(url, body, {
       headers: {
@@ -145,6 +150,31 @@ export const createInstagramMedia = async ({
   }
 };
 
+export const getInstagramMediaStatus = async ({
+  accessToken,
+  containerId,
+}: {
+  accessToken: string;
+  containerId: string;
+}) => {
+  try {
+    const url = `https://graph.instagram.com/v18.0/${containerId}`;
+    const { data } = await axios.get(url, {
+      params: {
+        fields: "status_code",
+        access_token: accessToken,
+      },
+    });
+    return data;
+  } catch (error: any) {
+    console.error(
+      "Error fetching Instagram media status:",
+      error.response?.data || error.message
+    );
+    throw new Error("Failed to fetch Instagram media status");
+  }
+};
+
 export const publishInstagramMedia = async ({
   accessToken,
   igUserId,
@@ -155,7 +185,7 @@ export const publishInstagramMedia = async ({
   containerId: string;
 }) => {
   try {
-    const url = `https://graph.facebook.com/v18.0/${igUserId}/media_publish`;
+    const url = `https://graph.instagram.com/v18.0/${igUserId}/media_publish`;
     const body = {
       creation_id: containerId,
     };
