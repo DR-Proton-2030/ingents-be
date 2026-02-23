@@ -4,6 +4,7 @@ import { fetchAndStoreYoutubeData, getSnapshot as getYoutubeSnapshot } from "../
 import { fetchAndStoreFacebookData, getSnapshot as getFacebookSnapshot } from "../../../../services/facebook/snapshot.service";
 import { fetchAndStoreInstagramData, getSnapshot as getInstagramSnapshot } from "../../../../services/instagram/snapshot.service";
 import { updateFbAllPostsEngagement } from "../../../../services/facebook/content.service";
+import { updateInstagramAllPostsEngagement } from "../../../../services/instagram/content.service";
 
 export const getSocialMetrics = async (req: Request, res: Response) => {
   try {
@@ -194,6 +195,14 @@ export const syncInstagram = async (req: Request, res: Response) => {
     }
 
     const data = await fetchAndStoreInstagramData(userId);
+
+    // Also update engagement for all existing Instagram posts in our database
+    try {
+      await updateInstagramAllPostsEngagement(userId);
+    } catch (engagementErr: any) {
+      console.error("Error updating Instagram post engagement during sync:", engagementErr.message);
+      // We don't fail the whole sync if only engagement update fails
+    }
 
     if (data) {
       console.log("Instagram data synchronized successfully", data);
