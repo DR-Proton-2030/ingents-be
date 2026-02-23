@@ -5,6 +5,7 @@ export async function fetchSocialMetrics(userId: string): Promise<{
     platform: string;
     metric: "followers" | "subscribers";
     count: number;
+    last_synced_at?: Date | null;
   }>;
   errors?: Array<{ platform: string; message: string }>;
 }> {
@@ -12,6 +13,7 @@ export async function fetchSocialMetrics(userId: string): Promise<{
     platform: string;
     metric: "followers" | "subscribers";
     count: number;
+    last_synced_at?: Date | null;
   }> = [];
   const errors: Array<{ platform: string; message: string }> = [];
 
@@ -59,6 +61,7 @@ export async function fetchSocialMetrics(userId: string): Promise<{
           platform: doc.platform_name,
           metric,
           count,
+          last_synced_at: doc.last_synced_at,
         });
       } catch (innerErr: any) {
         errors.push({
@@ -68,7 +71,7 @@ export async function fetchSocialMetrics(userId: string): Promise<{
       }
     }
 
-  1} catch (err: any) {
+  } catch (err: any) {
     console.error("fetchSocialMetrics error:", err);
     throw new Error(`Failed to fetch social metrics from database: ${err.message}`);
   }
