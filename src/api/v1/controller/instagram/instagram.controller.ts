@@ -192,7 +192,7 @@ export const postInstagramUniversal = async (req: Request, res: Response) => {
     }
 
     let finalMediaUrl = "";
-    let mediaType: "IMAGE" | "VIDEO" = "IMAGE";
+    let mediaType: "IMAGE" | "REELS" = "IMAGE";
 
     if (uploadedImage || imageUrl) {
       mediaType = "IMAGE";
@@ -205,7 +205,7 @@ export const postInstagramUniversal = async (req: Request, res: Response) => {
         )) || "";
       }
     } else if (uploadedVideo || videoURL) {
-      mediaType = "VIDEO";
+      mediaType = "REELS";
       finalMediaUrl = videoURL || "";
       if (uploadedVideo) {
         finalMediaUrl = (await uploadFileToS3Service(
@@ -221,7 +221,7 @@ export const postInstagramUniversal = async (req: Request, res: Response) => {
       accessToken: igAccessToken,
       igUserId,
       imageUrl: mediaType === "IMAGE" ? finalMediaUrl : undefined,
-      videoUrl: mediaType === "VIDEO" ? finalMediaUrl : undefined,
+      videoUrl: mediaType === "REELS" ? finalMediaUrl : undefined,
       caption: message,
       mediaType,
     });
@@ -253,7 +253,7 @@ export const postInstagramUniversal = async (req: Request, res: Response) => {
       platform: "instagram",
       content: message || "",
       media_urls: [finalMediaUrl],
-      media_type: mediaType.toLowerCase(),
+      media_type: mediaType === "IMAGE" ? "image" : "video",
       posted_at: new Date(),
       platform_post_id: published.id,
       is_scheduled: false,

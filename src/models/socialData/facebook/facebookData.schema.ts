@@ -33,6 +33,7 @@ const facebookContentItemSchema = new Schema(
     permalink_url: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     created_time: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     thumbnail: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+    media_urls: { type: [String], default: [] },
   },
   { _id: true }
 );

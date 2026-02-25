@@ -62,6 +62,7 @@ app.use("/api/v1/sent-emails", sentEmail_routes_1.default);
 app.use("/api/v1/email-templates", emailTemplate_routes_1.default);
 app.use("/api/v1/facebook", facebook_route_1.default);
 app.use("/api/v1/ig", instagram_route_1.default);
+app.use("/api/v1/instagram", instagram_route_1.default); // Added as an alternative to match possible dev portal configuration
 app.use("/api/v1/youtube", youtube_route_1.default);
 app.use("/api/v1/x", x_route_1.default);
 app.use("/api/v1/bank", bank_routes_1.default);

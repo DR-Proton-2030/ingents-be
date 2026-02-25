@@ -12,10 +12,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.publishInstagramMedia = exports.createInstagramMedia = exports.getInstagramLongLivedToken = exports.getInstagramProfile = exports.getInstagramUser = exports.getInstagramAuthURL = void 0;
+exports.publishInstagramMedia = exports.getInstagramMediaStatus = exports.createInstagramMedia = exports.getInstagramLongLivedToken = exports.getInstagramProfile = exports.getInstagramUser = exports.getInstagramAuthURL = void 0;
 const axios_1 = __importDefault(require("axios"));
 const dotenv_1 = __importDefault(require("dotenv"));
-dotenv_1.default.config();
+dotenv_1.default.config({ override: true });
 const INSTAGRAM_CLIENT_ID = process.env.INSTAGRAM_CLIENT_ID;
 const INSTAGRAM_CLIENT_SECRET = process.env.INSTAGRAM_CLIENT_SECRET;
 const REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI;
@@ -66,14 +66,11 @@ const getInstagramProfile = (accessToken) => __awaiter(void 0, void 0, void 0, f
     try {
         const url = `https://graph.instagram.com/me`;
         const params = {
-            fields: "id,username",
+            fields: "id,username,name,account_type,profile_picture_url,followers_count,follows_count,media_count",
             access_token: accessToken,
         };
         const { data } = yield axios_1.default.get(url, { params });
-        return {
-            id: data.id,
-            name: data.username,
-        };
+        return data;
     }
     catch (error) {
         console.error("Error fetching Instagram profile:", ((_b = error.response) === null || _b === void 0 ? void 0 : _b.data) || error.message);
@@ -104,18 +101,23 @@ const getInstagramLongLivedToken = (shortLivedToken) => __awaiter(void 0, void 0
     }
 });
 exports.getInstagramLongLivedToken = getInstagramLongLivedToken;
-const createInstagramMedia = (_d) => __awaiter(void 0, [_d], void 0, function* ({ accessToken, igUserId, imageUrl, caption, mediaType = "IMAGE", }) {
+const createInstagramMedia = (_d) => __awaiter(void 0, [_d], void 0, function* ({ accessToken, igUserId, imageUrl, videoUrl, caption, mediaType = "IMAGE", }) {
     var _e;
-    if (!imageUrl) {
-        throw new Error("imageUrl is required to create a media container");
+    if (!imageUrl && !videoUrl) {
+        throw new Error("imageUrl or videoUrl is required to create a media container");
     }
     try {
-        const url = `https://graph.facebook.com/v18.0/${igUserId}/media`;
+        const url = `https://graph.instagram.com/v18.0/${igUserId}/media`;
         const body = {
-            image_url: imageUrl,
             caption,
             media_type: mediaType,
         };
+        if (mediaType === "VIDEO" || mediaType === "REELS") {
+            body.video_url = videoUrl || imageUrl;
+        }
+        else {
+            body.image_url = imageUrl;
+        }
         const { data } = yield axios_1.default.post(url, body, {
             headers: {
                 Authorization: `Bearer ${accessToken}`,
@@ -131,10 +133,28 @@ const createInstagramMedia = (_d) => __awaiter(void 0, [_d], void 0, function* (
     }
 });
 exports.createInstagramMedia = createInstagramMedia;
-const publishInstagramMedia = (_f) => __awaiter(void 0, [_f], void 0, function* ({ accessToken, igUserId, containerId, }) {
+const getInstagramMediaStatus = (_f) => __awaiter(void 0, [_f], void 0, function* ({ accessToken, containerId, }) {
     var _g;
     try {
-        const url = `https://graph.facebook.com/v18.0/${igUserId}/media_publish`;
+        const url = `https://graph.instagram.com/v18.0/${containerId}`;
+        const { data } = yield axios_1.default.get(url, {
+            params: {
+                fields: "status_code",
+                access_token: accessToken,
+            },
+        });
+        return data;
+    }
+    catch (error) {
+        console.error("Error fetching Instagram media status:", ((_g = error.response) === null || _g === void 0 ? void 0 : _g.data) || error.message);
+        throw new Error("Failed to fetch Instagram media status");
+    }
+});
+exports.getInstagramMediaStatus = getInstagramMediaStatus;
+const publishInstagramMedia = (_h) => __awaiter(void 0, [_h], void 0, function* ({ accessToken, igUserId, containerId, }) {
+    var _j;
+    try {
+        const url = `https://graph.instagram.com/v18.0/${igUserId}/media_publish`;
         const body = {
             creation_id: containerId,
         };
@@ -147,7 +167,7 @@ const publishInstagramMedia = (_f) => __awaiter(void 0, [_f], void 0, function* 
         return data; // Returns the published post ID
     }
     catch (error) {
-        console.error("Error publishing Instagram media:", ((_g = error.response) === null || _g === void 0 ? void 0 : _g.data) || error.message);
+        console.error("Error publishing Instagram media:", ((_j = error.response) === null || _j === void 0 ? void 0 : _j.data) || error.message);
         throw new Error("Failed to publish Instagram media");
     }
 });

@@ -196,6 +196,7 @@ export const syncInstagram = async (req: Request, res: Response) => {
 
     const data = await fetchAndStoreInstagramData(userId);
 
+
     // Also update engagement for all existing Instagram posts in our database
     try {
       await updateInstagramAllPostsEngagement(userId);

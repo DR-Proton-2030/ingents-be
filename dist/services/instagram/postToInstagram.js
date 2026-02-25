@@ -65,7 +65,7 @@ const postToInstagram = (_a) => __awaiter(void 0, [_a], void 0, function* ({ use
     else {
         containerPayload.image_url = mediaUrl;
     }
-    const createContainerRes = yield axios_1.default.post(`https://graph.facebook.com/v18.0/${igUserId}/media`, containerPayload, {
+    const createContainerRes = yield axios_1.default.post(`https://graph.instagram.com/v18.0/${igUserId}/media`, containerPayload, {
         headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
@@ -79,7 +79,7 @@ const postToInstagram = (_a) => __awaiter(void 0, [_a], void 0, function* ({ use
         const maxAttempts = 30; // 5 minutes max wait
         while (status === "IN_PROGRESS" && attempts < maxAttempts) {
             yield new Promise((resolve) => setTimeout(resolve, 10000)); // Wait 10 seconds
-            const statusRes = yield axios_1.default.get(`https://graph.facebook.com/v18.0/${containerId}?fields=status_code`, {
+            const statusRes = yield axios_1.default.get(`https://graph.instagram.com/v18.0/${containerId}?fields=status_code`, {
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
                 },
@@ -92,7 +92,7 @@ const postToInstagram = (_a) => __awaiter(void 0, [_a], void 0, function* ({ use
         }
     }
     // Publish the media
-    const publishRes = yield axios_1.default.post(`https://graph.facebook.com/v18.0/${igUserId}/media_publish`, {
+    const publishRes = yield axios_1.default.post(`https://graph.instagram.com/v18.0/${igUserId}/media_publish`, {
         creation_id: containerId,
     }, {
         headers: {

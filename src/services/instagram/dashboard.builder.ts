@@ -21,15 +21,28 @@ export async function buildInstagramDashboardBuilder(
 
   // 2. Fetch Media Content (Posts)
   const mediaParams = {
-    fields: "id,media_type,media_url,permalink,timestamp,caption,like_count,comments_count",
+    fields: "id,media_type,media_url,permalink,timestamp,caption,like_count,comments_count,children{media_url,media_type}",
     access_token: accessToken,
     limit: 50, // Get recent 50 posts
   };
-  const mediaUrl = `https://graph.instagram.com/me/media`;
+  const mediaUrl = `https://graph.instagram.com/me/media`; // Can also use v18.0/${igUserId}/media
   let publishedContent: any[] = [];
   try {
     const { data } = await axios.get(mediaUrl, { params: mediaParams });
-    publishedContent = data.data || [];
+    publishedContent = (data.data || []).map((post: any) => {
+      let mediaUrls: string[] = [];
+      if (post.media_type === "CAROUSEL_ALBUM" && post.children?.data) {
+        mediaUrls = post.children.data
+          .map((child: any) => child.media_url)
+          .filter(Boolean);
+      } else if (post.media_url) {
+        mediaUrls.push(post.media_url);
+      }
+      return {
+        ...post,
+        media_urls: mediaUrls,
+      };
+    });
   } catch (err) {
     console.error("Failed to fetch IG Media for dashboard:", err);
   }

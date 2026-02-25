@@ -23,6 +23,7 @@ const instagramContentItemSchema = new Schema(
     id: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     media_type: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     media_url: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+    media_urls: { type: [String], default: [] },
     permalink: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     timestamp: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     caption: SCHEMA_DEFINITION_PROPERTY.optionalNullString,

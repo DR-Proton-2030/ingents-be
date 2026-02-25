@@ -59,6 +59,7 @@ const postedContentSchema = new mongoose_1.Schema({
     error_message: model_constant_1.default.optionalNullString,
 }, Object.assign(Object.assign({}, schemaOption_1.GENERAL_SCHEMA_OPTIONS), { toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 // Index for efficient querying
+postedContentSchema.index({ platform_post_id: 1 });
 postedContentSchema.index({ user_id: 1, platform: 1 });
 postedContentSchema.index({ posted_at: -1 });
 postedContentSchema.index({ scheduled_post_id: 1 });
