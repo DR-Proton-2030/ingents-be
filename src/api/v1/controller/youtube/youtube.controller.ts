@@ -128,13 +128,25 @@ export const youtubeCallback = async (req: Request, res: Response) => {
   try {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
-    console.log("Access Token:", tokens.access_token);
-    console.log("Refresh Token:", tokens.refresh_token);
+    
+    // Fetch channel details to store in User model
+    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    const { channelData, channelId } = await fetchChannelInfo(youtube);
+
     if (user_id) {
       const updateData: any = {};
-      if (tokens.refresh_token) {
-        updateData["youtube.access_token"] = tokens.refresh_token;
+      
+      // Standardize storage: access_token for recent, refresh_token for persistent
+      if (tokens.access_token) {
+        updateData["youtube.access_token"] = tokens.access_token;
       }
+      if (tokens.refresh_token) {
+        updateData["youtube.refresh_token"] = tokens.refresh_token;
+      }
+
+      // Store channel identity
+      updateData["youtube.project_id"] = channelId;
+      updateData["youtube.name"] = channelData.snippet?.title || "";
 
       if (Object.keys(updateData).length > 0) {
         await UserModel.findByIdAndUpdate(
@@ -323,19 +335,12 @@ export const uploadYoutubeVideo = async (req: Request, res: Response) => {
       });
     }
 
-    // Setup OAuth client
-    oauth2Client.setCredentials({
-      refresh_token: user.youtube.access_token,
-    });
-
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    // Setup YouTube client
+    const { youtube } = await getAuthorizedClient(
+      user_id,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
 
     let videoStream: any;
     if (req.file) {
@@ -537,17 +542,11 @@ export const getAllYoutubeVideos = async (req: Request, res: Response) => {
       });
     }
 
-    oauth2Client.setCredentials({
-      refresh_token: user.youtube.access_token,
-    });
-
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    const { youtube } = await getAuthorizedClient(
+      userId,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
 
     const channelResp = await youtube.channels.list({
       part: ["contentDetails"],
@@ -778,14 +777,11 @@ export const getVideoComments = async (req: Request, res: Response) => {
       });
     }
 
-    oauth2Client.setCredentials({ refresh_token: user.youtube.access_token });
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    const { youtube } = await getAuthorizedClient(
+      user_id as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
 
     const allComments: Array<{
       id?: string | null;
@@ -871,14 +867,11 @@ export const addVideoComment = async (req: Request, res: Response) => {
         .json({ success: false, message: "Invalid YouTube token" });
     }
 
-    oauth2Client.setCredentials({ refresh_token: user.youtube.access_token });
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    const { youtube } = await getAuthorizedClient(
+      user_id as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
 
     const { data }: { data: youtube_v3.Schema$CommentThread } =
       await youtube.commentThreads.insert({
@@ -931,14 +924,11 @@ export const replyToYoutubeComment = async (req: Request, res: Response) => {
         .json({ success: false, message: "Invalid YouTube token" });
     }
 
-    oauth2Client.setCredentials({ refresh_token: user.youtube.access_token });
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    const { youtube } = await getAuthorizedClient(
+      user_id as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
 
     const { data }: { data: youtube_v3.Schema$Comment } =
       await youtube.comments.insert({
@@ -984,14 +974,11 @@ export const getSubscribers = async (req: Request, res: Response) => {
         .json({ success: false, message: "Invalid YouTube token" });
     }
 
-    oauth2Client.setCredentials({ refresh_token: user.youtube.access_token });
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    const { youtube } = await getAuthorizedClient(
+      user_id as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
 
     const subscribers: Array<{
       channelId?: string | null;
@@ -1050,14 +1037,11 @@ export const getRecentSubscribers = async (req: Request, res: Response) => {
         .json({ success: false, message: "Invalid YouTube token" });
     }
 
-    oauth2Client.setCredentials({ refresh_token: user.youtube.access_token });
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    const { youtube } = await getAuthorizedClient(
+      user_id as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
 
     const recent: Array<{
       channelId?: string | null;
@@ -1116,14 +1100,11 @@ export const getUserSubscriptions = async (req: Request, res: Response) => {
         .json({ success: false, message: "Invalid YouTube token" });
     }
 
-    oauth2Client.setCredentials({ refresh_token: user.youtube.access_token });
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    const { youtube } = await getAuthorizedClient(
+      user_id as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
 
     const subs: Array<{
       subscribedChannelId?: string | null;
@@ -1183,14 +1164,11 @@ export const getVideoStatistics = async (req: Request, res: Response) => {
         .json({ success: false, message: "Invalid YouTube token" });
     }
 
-    oauth2Client.setCredentials({ refresh_token: user.youtube.access_token });
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    const { youtube } = await getAuthorizedClient(
+      user_id as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
     const { data }: { data: youtube_v3.Schema$VideoListResponse } =
       await youtube.videos.list({
         part: ["statistics"],
@@ -1243,7 +1221,9 @@ export const getSingleVideoAnalytics = async (req: Request, res: Response) => {
     }
 
     const { youtube, analytics } = await getAuthorizedClient(
-      user.youtube.access_token,
+      userId as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
     );
 
     const result = await fetchSingleVideoAnalytics({
@@ -1288,14 +1268,11 @@ export const getChannelStatistics = async (req: Request, res: Response) => {
         .json({ success: false, message: "Invalid YouTube token" });
     }
 
-    oauth2Client.setCredentials({ refresh_token: user.youtube.access_token });
-    const accessTokenResponse = await oauth2Client.getAccessToken();
-    oauth2Client.setCredentials({
-      access_token: accessTokenResponse?.token || user.youtube.access_token,
-      refresh_token: user.youtube.access_token,
-    });
-
-    const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+    const { youtube } = await getAuthorizedClient(
+      user_id as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
     const { data }: { data: youtube_v3.Schema$ChannelListResponse } =
       await youtube.channels.list({
         part: ["statistics"],
@@ -1337,7 +1314,9 @@ export const getYoutubeAllDetails = async (req: Request, res: Response) => {
     }
 
     const { youtube, analytics } = await getAuthorizedClient(
-      user.youtube.access_token,
+      user_id as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
     );
 
     // 1. Channel info (thin controller)
@@ -2097,7 +2076,11 @@ export const deleteYoutubeVideo = async (req: Request, res: Response) => {
         .json({ success: false, message: "User or YouTube token not found" });
     }
 
-    const { youtube } = await getAuthorizedClient(user.youtube.access_token);
+    const { youtube } = await getAuthorizedClient(
+      user_id as string,
+      user.youtube?.access_token,
+      user.youtube?.refresh_token,
+    );
 
     await youtube.videos.delete({ id: videoId });
 

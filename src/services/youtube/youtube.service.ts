@@ -9,19 +9,62 @@ const YT_CLIENT_ID = process.env.YT_CLIENT_ID!;
 const YT_CLIENT_SECRET = process.env.YT_CLIENT_SECRET!;
 const YT_REDIRECT_URI = process.env.YT_REDIRECT_URI!;
 
-/** Helper to get an authorized YouTube client using a refresh token */
-export const getAuthorizedClient = async (refreshToken: string) => {
+/** Helper to get an authorized YouTube client using tokens from DB */
+export const getAuthorizedClient = async (
+  userId: string,
+  accessToken?: string | null,
+  refreshToken?: string | null,
+) => {
   const client = new google.auth.OAuth2(
     YT_CLIENT_ID,
     YT_CLIENT_SECRET,
     YT_REDIRECT_URI,
   );
-  client.setCredentials({ refresh_token: refreshToken });
-  const accessTokenResponse = await client.getAccessToken();
+
+  // If we only have one token, it might be the refresh token (due to previous code)
+  const actualRefreshToken = refreshToken || accessToken || "";
+  const actualAccessToken = accessToken || "";
+
   client.setCredentials({
-    access_token: accessTokenResponse?.token || refreshToken,
-    refresh_token: refreshToken,
+    access_token: actualAccessToken,
+    refresh_token: actualRefreshToken,
   });
+
+  // Automatically refresh if needed
+  try {
+    const { token: newAccessToken } = await client.getAccessToken();
+
+    // If double-set was successful or token was refreshed, update DB if userId provided
+    if (userId) {
+      const updateData: any = {};
+      
+      // If we got a new access token, save it
+      if (newAccessToken && newAccessToken !== actualAccessToken) {
+        console.log(`[YouTubeService] Auto-refreshing access token for user ${userId}`);
+        updateData["youtube.access_token"] = newAccessToken;
+      }
+      
+      // Migration: if refresh_token was empty but we have one now (or used the one from access_token)
+      // save it to the correct field
+      if (!refreshToken && actualRefreshToken) {
+        console.log(`[YouTubeService] Migrating YouTube refresh token for user ${userId}`);
+        updateData["youtube.refresh_token"] = actualRefreshToken;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await UserModel.findByIdAndUpdate(userId, { $set: updateData });
+      }
+    }
+
+    client.setCredentials({
+      access_token: newAccessToken || actualAccessToken,
+      refresh_token: actualRefreshToken,
+    });
+  } catch (err: any) {
+    console.error(`[YouTubeService] Failed to refresh/get access token for ${userId}:`, err.message);
+    throw new Error(`YouTube authentication failed: ${err.message}`);
+  }
+
   return {
     youtube: google.youtube({ version: "v3", auth: client }),
     analytics: google.youtubeAnalytics({ version: "v2", auth: client }),

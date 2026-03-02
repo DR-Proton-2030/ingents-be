@@ -29,14 +29,16 @@ export const postToYoutube = async ({
 }: PostToYoutubeParams) => {
   // Get user and access token
   const user = await UserModel.findById(userId).exec();
-  if (!user || !user.youtube?.access_token) {
-    throw new Error("YouTube user access token not found");
+  if (!user || !user.youtube) {
+    throw new Error("YouTube user or credentials not found");
   }
 
-  const refreshToken = user.youtube.access_token;
-
   // Get authorized client
-  const { youtube } = await getAuthorizedClient(refreshToken);
+  const { youtube } = await getAuthorizedClient(
+    userId,
+    user.youtube.access_token,
+    user.youtube.refresh_token,
+  );
 
   // Download video from URL
   const axios = (await import("axios")).default;

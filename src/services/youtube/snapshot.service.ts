@@ -37,12 +37,25 @@ export const fetchAndStoreYoutubeData = async (userId: string) => {
 
     
     const { youtube, analytics } = await getAuthorizedClient(
+      userId,
       user.youtube.access_token,
+      user.youtube.refresh_token,
     );
 
     // 1. Channel info
     const { channelData, channelId, uploadsPlaylistId } =
       await fetchChannelInfo(youtube);
+
+    // Ensure we have name and project_id in User model
+    if (!user.youtube.name || !user.youtube.project_id) {
+      console.log(`[YouTubeSync] Syncing channel details for ${userId}`);
+      await UserModel.findByIdAndUpdate(userId, {
+        $set: {
+          "youtube.name": channelData.snippet?.title || "",
+          "youtube.project_id": channelId,
+        },
+      });
+    }
 
     // 2. Dates for Analytics
     const daysParam = 30;
