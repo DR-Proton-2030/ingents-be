@@ -29,6 +29,7 @@ const instagramContentItemSchema = new Schema(
     caption: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     like_count: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
     comments_count: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
+    insights: { type: [Schema.Types.Mixed], default: [] },
   },
   { _id: true }
 );

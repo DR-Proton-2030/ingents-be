@@ -206,3 +206,92 @@ export const publishInstagramMedia = async ({
     throw new Error("Failed to publish Instagram media");
   }
 };
+
+export const getSinglePostAnalyticsService = async (
+  postId: string,
+  accessToken: string
+) => {
+  try {
+    // 1. Fetch basic media data (like_count, comments_count, etc.)
+    // We try without the version prefix first as it's more flexible
+    const mediaUrl = `https://graph.instagram.com/${postId}?fields=id,media_type,media_product_type,media_url,permalink,thumbnail_url,timestamp,caption,like_count,comments_count&access_token=${accessToken}`;
+    const { data: mediaData } = await axios.get(mediaUrl);
+
+    // 2. Fetch insights based on media type
+    let metrics = "impressions,reach,saved,engagement";
+    
+    if (mediaData.media_product_type === 'REELS') {
+      // Removing 'plays' as it's causing IGApiException for some Reel types
+      metrics = "comments,likes,reach,saved,shares,total_interactions";
+    } else if (mediaData.media_type === 'CAROUSEL_ALBUM') {
+      metrics = "carousel_album_engagement,carousel_album_impressions,carousel_album_reach,carousel_album_saved,carousel_album_video_views";
+    } else if (mediaData.media_type === 'VIDEO') {
+      metrics = "impressions,reach,saved,engagement,video_views";
+    }
+
+    const insightsUrl = `https://graph.instagram.com/${postId}/insights?metric=${metrics}&access_token=${accessToken}`;
+    
+    let insightsData = null;
+    let insightsError = null;
+    try {
+      const { data } = await axios.get(insightsUrl);
+      insightsData = data.data; 
+    } catch (err: any) {
+      insightsError = err.response?.data || err.message;
+      console.warn("Post Insights fetch failed:", insightsError);
+    }
+
+    return {
+      media: mediaData,
+      insights: insightsData ? insightsData.map((item: any) => ({
+        name: item.name,
+        period: item.period,
+        values: item.values
+      })) : null,
+      insights_error: insightsError // Return error for debugging
+    };
+  } catch (error: any) {
+    console.error("Error fetching Instagram single post analytics:", error.response?.data || error.message);
+    throw new Error("Failed to fetch Instagram single post analytics");
+  }
+};
+
+export const getInstagramAccountInsightsService = async (
+  igUserId: string,
+  accessToken: string
+) => {
+  try {
+    // Fetch account-level insights and demographics
+    // Note: demographics are 'lifetime' metrics, while others are 'day'
+    const dailyMetrics = "impressions,reach,profile_views,follower_count";
+    const lifetimeMetrics = "audience_city,audience_country,audience_gender_age";
+
+    const dailyUrl = `https://graph.instagram.com/${igUserId}/insights?metric=${dailyMetrics}&period=day&access_token=${accessToken}`;
+    const lifetimeUrl = `https://graph.instagram.com/${igUserId}/insights?metric=${lifetimeMetrics}&period=lifetime&access_token=${accessToken}`;
+
+    const [dailyRes, lifetimeRes] = await Promise.all([
+      axios.get(dailyUrl).catch(err => {
+        console.warn("Daily insights failed:", err.response?.data || err.message);
+        return { data: { data: [] } };
+      }),
+      axios.get(lifetimeUrl).catch(err => {
+        const errorData = err.response?.data?.error;
+        console.warn("Lifetime insights failed:", errorData || err.message);
+        // Special case: Audience data requires at least 100 followers
+        if (errorData?.code === 10 || errorData?.message?.includes('100 followers')) {
+          return { data: { data: [], note: "Audience demographics require at least 100 followers." } };
+        }
+        return { data: { data: [] } };
+      })
+    ]);
+
+    return {
+      daily: dailyRes.data.data,
+      audience: lifetimeRes.data.data,
+      note: (lifetimeRes.data as any).note || null
+    };
+  } catch (error: any) {
+    console.error("Account insights service error:", error.response?.data || error.message);
+    return null;
+  }
+};

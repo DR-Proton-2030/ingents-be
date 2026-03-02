@@ -13,6 +13,8 @@ import {
   getInstagramProfile,
   getInstagramUser,
   publishInstagramMedia,
+  getSinglePostAnalyticsService,
+  getInstagramAccountInsightsService,
 } from "../../../../services/instagram/instagram.service";
 import UserModel from "../../../../models/users/users.model";
 import PostedContentModel from "../../../../models/postedContent/postedContent.model";
@@ -335,6 +337,54 @@ export const disconnectInstagram = async (req: Request, res: Response) => {
       success: false,
       message: "Failed to disconnect Instagram",
       error: error.message,
+    });
+  }
+};
+
+export const getSinglePostAnalytics = async (req: Request, res: Response) => {
+  try {
+    const { postId } = req.params;
+    const { userId } = req.query;
+
+    if (!postId) {
+      return res.status(400).json({ error: "postId is required" });
+    }
+
+    if (!userId) {
+      return res.status(400).json({ error: "userId query parameter is required" });
+    }
+
+    const user = await UserModel.findById(userId as string).exec();
+    if (!user || !user.instagram?.access_token) {
+      return res.status(400).json({ error: "Instagram account not connected or missing credentials" });
+    }
+
+    const analyticsData = await getSinglePostAnalyticsService(
+      postId,
+      user.instagram.access_token
+    );
+
+    // Also fetch account-level insights (demographics/audience) if available
+    let accountInsights = null;
+    if (user.instagram.project_id) {
+      accountInsights = await getInstagramAccountInsightsService(
+        user.instagram.project_id,
+        user.instagram.access_token
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...analyticsData,
+        account_insights: accountInsights
+      },
+    });
+  } catch (error: any) {
+    console.error("Failed to fetch single post analytics:", error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch single post analytics",
     });
   }
 };

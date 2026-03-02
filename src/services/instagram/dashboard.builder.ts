@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getInstagramProfile } from "./instagram.service";
+import { getInstagramProfile, getSinglePostAnalyticsService } from "./instagram.service";
 
 export async function buildInstagramDashboardBuilder(
   igUserId: string,
@@ -29,7 +29,10 @@ export async function buildInstagramDashboardBuilder(
   let publishedContent: any[] = [];
   try {
     const { data } = await axios.get(mediaUrl, { params: mediaParams });
-    publishedContent = (data.data || []).map((post: any) => {
+    const rawMedia = data.data || [];
+    
+    // Fetch insights for each post in parallel
+    publishedContent = await Promise.all(rawMedia.map(async (post: any) => {
       let mediaUrls: string[] = [];
       if (post.media_type === "CAROUSEL_ALBUM" && post.children?.data) {
         mediaUrls = post.children.data
@@ -38,11 +41,21 @@ export async function buildInstagramDashboardBuilder(
       } else if (post.media_url) {
         mediaUrls.push(post.media_url);
       }
+
+      let insights = [];
+      try {
+        const analytics = await getSinglePostAnalyticsService(post.id, accessToken);
+        insights = analytics.insights || [];
+      } catch (e) {
+        console.warn(`Failed to fetch insights for post ${post.id}:`, e);
+      }
+
       return {
         ...post,
         media_urls: mediaUrls,
+        insights: insights
       };
-    });
+    }));
   } catch (err) {
     console.error("Failed to fetch IG Media for dashboard:", err);
   }
