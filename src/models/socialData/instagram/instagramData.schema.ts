@@ -22,6 +22,7 @@ const instagramContentItemSchema = new Schema(
   {
     id: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     media_type: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+    media_product_type: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     media_url: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     media_urls: { type: [String], default: [] },
     permalink: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
@@ -86,8 +87,8 @@ const instagramInsightsSchema = new Schema(
       newMessagingContacts: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
       returningMessagingContacts: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
     },
-    topContentByViews: [new Schema({}, { strict: false })],
-    topContentByInteractions: [new Schema({}, { strict: false })],
+    topContentByViews: [instagramContentItemSchema],
+    topContentByInteractions: [instagramContentItemSchema],
   },
   { _id: true }
 );

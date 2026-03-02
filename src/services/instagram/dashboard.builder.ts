@@ -21,7 +21,7 @@ export async function buildInstagramDashboardBuilder(
 
   // 2. Fetch Media Content (Posts)
   const mediaParams = {
-    fields: "id,media_type,media_url,permalink,timestamp,caption,like_count,comments_count,children{media_url,media_type}",
+    fields: "id,media_type,media_product_type,media_url,permalink,timestamp,caption,like_count,comments_count,children{media_url,media_type}",
     access_token: accessToken,
     limit: 50, // Get recent 50 posts
   };
@@ -44,6 +44,7 @@ export async function buildInstagramDashboardBuilder(
 
       let insights = [];
       try {
+        console.log("Fetching analytics for post ID:", post.id);
         const analytics = await getSinglePostAnalyticsService(post.id, accessToken);
         insights = analytics.insights || [];
       } catch (e) {
@@ -51,8 +52,16 @@ export async function buildInstagramDashboardBuilder(
       }
 
       return {
-        ...post,
+        id: post.id,
+        media_type: post.media_type,
+        media_product_type: post.media_product_type || "",
+        media_url: post.media_url,
         media_urls: mediaUrls,
+        permalink: post.permalink,
+        timestamp: post.timestamp,
+        caption: post.caption,
+        like_count: post.like_count,
+        comments_count: post.comments_count,
         insights: insights
       };
     }));
@@ -110,18 +119,34 @@ export async function buildInstagramDashboardBuilder(
     let reelsCount = 0;
 
     const sortedByInteractions = [...publishedContent].sort((a, b) => {
-      const aInteractions = (a.like_count || 0) + (a.comments_count || 0);
-      const bInteractions = (b.like_count || 0) + (b.comments_count || 0);
-      return bInteractions - aInteractions;
+      // Prioritize using 'total_interactions' from insights for sorting
+      const getInter = (post: any) => {
+         let val = (post.like_count || 0) + (post.comments_count || 0);
+         if (post.insights && Array.isArray(post.insights)) {
+            const meta = post.insights.find((i: any) => i.name === 'total_interactions');
+            if (meta?.values?.[0]?.value) val = meta.values[0].value;
+         }
+         return val;
+      };
+      return getInter(b) - getInter(a);
     });
 
     sortedByInteractions.forEach(post => {
-      const interactions = (post.like_count || 0) + (post.comments_count || 0);
+      let interactions = (post.like_count || 0) + (post.comments_count || 0);
+      
+      // Use detailed interactions from insights if available
+      if (post.insights && Array.isArray(post.insights)) {
+        const totalInterObj = post.insights.find((i: any) => i.name === 'total_interactions');
+        if (totalInterObj?.values?.[0]?.value) {
+            interactions = totalInterObj.values[0].value;
+        }
+      }
+
       totalInteractions += interactions;
       
       // Determine if Reel or Post
-      // In IG Graph API: VIDEO is usually a Reel/Video, IMAGE/CAROUSEL_ALBUM is a Post
-      if (post.media_type === "VIDEO") {
+      // In IG Graph API: media_product_type === 'REELS' or media_type === 'VIDEO'
+      if (post.media_product_type === "REELS" || post.media_type === "VIDEO") {
         reelsInteractions += interactions;
         reelsCount++;
       } else {

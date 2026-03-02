@@ -218,15 +218,15 @@ export const getSinglePostAnalyticsService = async (
     const { data: mediaData } = await axios.get(mediaUrl);
 
     // 2. Fetch insights based on media type
-    let metrics = "impressions,reach,saved,engagement";
+    // Modern set of metrics for v18+ / v20+
+    // Note: impressions is being deprecated in favor of 'views' for newer media
+    // carousel_album_ prefixed metrics are deprecated and were removed
+    let metrics = "reach,saved,comments,likes,shares,total_interactions";
     
-    if (mediaData.media_product_type === 'REELS') {
-      // Removing 'plays' as it's causing IGApiException for some Reel types
-      metrics = "comments,likes,reach,saved,shares,total_interactions";
-    } else if (mediaData.media_type === 'CAROUSEL_ALBUM') {
-      metrics = "carousel_album_engagement,carousel_album_impressions,carousel_album_reach,carousel_album_saved,carousel_album_video_views";
-    } else if (mediaData.media_type === 'VIDEO') {
-      metrics = "impressions,reach,saved,engagement,video_views";
+    // We can still try to get impressions/views if needed, but the above set is most stable across types
+    if (mediaData.media_type === 'VIDEO' || mediaData.media_product_type === 'REELS') {
+      // For Reels, this set is well-supported
+      metrics = "reach,saved,comments,likes,shares,total_interactions";
     }
 
     const insightsUrl = `https://graph.instagram.com/${postId}/insights?metric=${metrics}&access_token=${accessToken}`;
@@ -242,6 +242,7 @@ export const getSinglePostAnalyticsService = async (
     }
 
     return {
+      postId,
       media: mediaData,
       insights: insightsData ? insightsData.map((item: any) => ({
         name: item.name,
