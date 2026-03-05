@@ -1,6 +1,6 @@
 import axios from "axios";
 import { getSinglePostAnalyticsService } from "./instagram.service";
-const BASE_URL = "https://graph.facebook.com/v20.0";
+const BASE_URL = "https://graph.facebook.com/v22.0";
 
 export async function buildInstagramDashboardBuilder(
   igUserId: string,
@@ -86,65 +86,217 @@ export async function buildInstagramDashboardBuilder(
     let totalInteractions = 0;
     const sortedByInteractions = [...publishedContent].sort((a, b) => {
       const getInter = (post: any) => {
-          let val = (post.like_count || 0) + (post.comments_count || 0);
-          const meta = post.insights?.find((i: any) => i.name === 'total_interactions');
-          if (meta?.values?.[0]?.value) val = meta.values[0].value;
-          return val;
+        let val = (post.like_count || 0) + (post.comments_count || 0);
+        const meta = post.insights?.find(
+          (i: any) => i.name === "total_interactions"
+        );
+        if (meta?.values?.[0]?.value) val = meta.values[0].value;
+        return val;
       };
       return getInter(b) - getInter(a);
     });
 
-    sortedByInteractions.forEach(post => {
+    sortedByInteractions.forEach((post) => {
       let interactions = (post.like_count || 0) + (post.comments_count || 0);
-      const totalInterObj = post.insights?.find((i: any) => i.name === 'total_interactions');
-      if (totalInterObj?.values?.[0]?.value) interactions = totalInterObj.values[0].value;
+      const totalInterObj = post.insights?.find(
+        (i: any) => i.name === "total_interactions"
+      );
+      if (totalInterObj?.values?.[0]?.value)
+        interactions = totalInterObj.values[0].value;
       totalInteractions += interactions;
     });
 
     insightsData.interactions.total = totalInteractions;
     insightsData.topContentByInteractions = sortedByInteractions.slice(0, 5);
-    insightsData.topContentByViews = sortedByInteractions.slice(0, 5);
     
-    // 4. Fetch Account Insights (Day period)
-    const insightsRes = await axios.get(`${BASE_URL}/${igUserId}/insights`, {
-      params: { metric: "impressions,reach,profile_views", period: "day", access_token: accessToken }
-    }).catch(() => ({ data: { data: [] } }));
+    const sortedByViews = [...publishedContent].sort((a, b) => {
+      const getViews = (post: any) => {
+        const viewsObj = post.insights?.find(
+          (i: any) => i.name === "views" || i.name === "impressions"
+        );
+        return viewsObj?.values?.[0]?.value || 0;
+      };
+      return getViews(b) - getViews(a);
+    });
+    insightsData.topContentByViews = sortedByViews.slice(0, 5);
+  } catch (err) {
+    console.error("[DashboardBuilder] Failed to build content insights:", err);
+  }
 
-    if (insightsRes.data?.data) {
-      insightsRes.data.data.forEach((metric: any) => {
-        let sum = 0;
-        if (Array.isArray(metric.values)) {
-          metric.values.forEach((val: any) => sum += (val.value || 0));
-        }
+  // 4. Fetch Account Insights (Day period)
+  let combinedInsights: any[] = [];
+  try {
+    const [totalsRes, breakdownMediaRes, breakdownFollowRes, seriesRes] = await Promise.all([
+      // A. Totals
+      axios.get(`${BASE_URL}/${igUserId}/insights`, {
+        params: {
+          metric: "views,reach,profile_views,total_interactions",
+          period: "day",
+          metric_type: "total_value",
+          access_token: accessToken,
+        },
+      }).catch(() => ({ data: { data: [] } })),
+      // B. Media Type Breakdown
+      axios.get(`${BASE_URL}/${igUserId}/insights`, {
+        params: {
+          metric: "views,reach,total_interactions",
+          period: "day",
+          metric_type: "total_value",
+          breakdown: "media_product_type",
+          access_token: accessToken,
+        },
+      }).catch(() => ({ data: { data: [] } })),
+      // C. Follow Type Breakdown
+      axios.get(`${BASE_URL}/${igUserId}/insights`, {
+        params: {
+          metric: "views,reach,total_interactions",
+          period: "day",
+          metric_type: "total_value",
+          breakdown: "follow_type",
+          access_token: accessToken,
+        },
+      }).catch(() => ({ data: { data: [] } })),
+      // D. Time-series only
+      axios.get(`${BASE_URL}/${igUserId}/insights`, {
+        params: {
+          metric: "follower_count",
+          period: "day",
+          access_token: accessToken,
+        },
+      }).catch(() => ({ data: { data: [] } }))
+    ]);
+
+    combinedInsights = [
+      ...(totalsRes.data?.data || []),
+      ...(seriesRes.data?.data || []),
+    ];
+
+    // Helper to extract breakdown value
+    const getBreakdownVal = (metricData: any, dimensionValue: string) => {
+      const breakdown = metricData?.total_value?.breakdowns?.[0];
+      if (!breakdown) return 0;
+      const result = breakdown.results?.find((r: any) => 
+        r.dimension_values?.includes(dimensionValue) || 
+        Object.values(r.dimension_values || {}).includes(dimensionValue)
+      );
+      return result?.value || 0;
+    };
+
+    // Process Totals
+    if (totalsRes.data?.data) {
+      totalsRes.data.data.forEach((metric: any) => {
+        const sum = metric.total_value?.value || 0;
         if (metric.name === "reach") insightsData.accountsReached = sum;
         if (metric.name === "profile_views") insightsData.profileActivity.profileVisits = sum;
-        if (metric.name === "impressions") insightsData.views.total = sum;
+        if (metric.name === "views") insightsData.views.total = sum;
+        if (metric.name === "total_interactions") insightsData.interactions.total = sum;
+      });
+    }
+
+    // Process Media Type Breakdowns
+    if (breakdownMediaRes.data?.data) {
+      breakdownMediaRes.data.data.forEach((metric: any) => {
+        const reels = getBreakdownVal(metric, "REELS");
+        const stories = getBreakdownVal(metric, "STORY");
+        const feed = getBreakdownVal(metric, "FEED");
+
+        if (metric.name === "reach") {
+          insightsData.reachByContentType.reels = reels;
+          insightsData.reachByContentType.stories = stories;
+          insightsData.reachByContentType.posts = feed;
+        }
+        if (metric.name === "total_interactions") {
+          insightsData.interactionsByContentType.reels = reels;
+          insightsData.interactionsByContentType.stories = stories;
+          insightsData.interactionsByContentType.posts = feed;
+        }
+      });
+    }
+
+    // Process Follow Type Breakdowns (Percentages)
+    if (breakdownFollowRes.data?.data) {
+      breakdownFollowRes.data.data.forEach((metric: any) => {
+        const followers = getBreakdownVal(metric, "FOLLOWER");
+        const nonFollowers = getBreakdownVal(metric, "NON_FOLLOWER");
+        const total = followers + nonFollowers;
+        
+        if (total > 0) {
+          const fPerc = Math.round((followers / total) * 100);
+          const nfPerc = 100 - fPerc;
+
+          if (metric.name === "views") {
+            insightsData.views.followersPercentage = fPerc;
+            insightsData.views.nonFollowersPercentage = nfPerc;
+          }
+          if (metric.name === "total_interactions") {
+            insightsData.interactions.followersPercentage = fPerc;
+            insightsData.interactions.nonFollowersPercentage = nfPerc;
+          }
+        }
       });
     }
   } catch (err) {
-    console.error("[DashboardBuilder] Failed to build business insights:", err);
+    console.error("[DashboardBuilder] Failed to build account insights:", err);
   }
 
-  // 5. Fetch Audience Demographics (Lifetime period)
+  // 5. Fetch Audience Demographics (Individual breakdowns for reliability)
   let demographicsData: any = {};
-  const demoUrl = `${BASE_URL}/${igUserId}/insights`;
   try {
-    const { data: demoRes } = await axios.get(demoUrl, {
-      params: {
-        metric: "audience_city,audience_country,audience_gender_age,audience_locale",
-        period: "lifetime",
-        access_token: accessToken,
-      },
-    });
-    if (demoRes && demoRes.data) {
-      demoRes.data.forEach((metric: any) => {
-        if (metric.values && metric.values.length > 0) {
-           demographicsData[metric.name] = metric.values[metric.values.length - 1].value || {};
+    const breakdownNames = ["city", "country", "gender", "age"];
+    const demoResponses = await Promise.all(
+      breakdownNames.map(b => 
+        axios.get(`${BASE_URL}/${igUserId}/insights`, {
+          params: {
+            metric: "follower_demographics",
+            period: "lifetime",
+            metric_type: "total_value",
+            breakdown: b,
+            access_token: accessToken,
+          },
+        }).catch(err => {
+          console.warn(`[DashboardBuilder] Demographic ${b} failed:`, err.response?.data || err.message);
+          return { data: { data: [] } };
+        })
+      )
+    );
+
+    demoResponses.forEach((res, idx) => {
+      const dimension = breakdownNames[idx];
+      const items = res.data?.data || [];
+      items.forEach((item: any) => {
+        const results = item.total_value?.breakdowns?.[0]?.results;
+        if (results) {
+          if (!demographicsData[dimension]) demographicsData[dimension] = {};
+          results.forEach((r: any) => {
+            const label = Object.values(r.dimension_values || {})[0] as string;
+            if (label) demographicsData[dimension][label] = r.value;
+          });
+        } else if (item.values?.[0]?.value) {
+          // Fallback legacy structure
+          demographicsData[dimension] = item.values[0].value;
         }
       });
-    }
+    });
+
+    console.log(`[DashboardBuilder] Final merged demographics for ${igUserId}:`, Object.keys(demographicsData));
   } catch (demoErr: any) {
-    console.warn(`[DashboardBuilder] Audience metrics unavailable for ${igUserId} (possibly <100 followers)`);
+    console.warn(
+      `[DashboardBuilder] Audience metrics unavailable for ${igUserId}`
+    );
+  }
+
+  // 6. Calculate Summary
+  const summary: any = {};
+  if (combinedInsights.length > 0) {
+    combinedInsights.forEach((metric: any) => {
+      let sum = 0;
+      if (metric.total_value) {
+        sum = metric.total_value.value || 0;
+      } else if (Array.isArray(metric.values)) {
+        sum = metric.values.reduce((acc: number, v: any) => acc + (v.value || 0), 0);
+      }
+      summary[metric.name] = sum;
+    });
   }
 
   return {
@@ -152,17 +304,24 @@ export async function buildInstagramDashboardBuilder(
       id: profileData.id || "",
       username: profileData.username || "",
       name: profileData.name || "",
-      account_type: "BUSINESS", // Hardcoded as this is Business API
+      account_type: "BUSINESS",
       profile_picture_url: profileData.profile_picture_url || "",
       followersCount: profileData.followers_count || 0,
       followsCount: profileData.follows_count || 0,
       mediaCount: profileData.media_count || 0,
+      views: summary.views || 0,
+      reach: summary.reach || 0,
+      profileViews: summary.profile_views || 0,
     },
     content: { publishedContent },
     audience: {
       followers: profileData.followers_count || 0,
       demographics: demographicsData,
     },
-    insights: insightsData,
+    insights: {
+      ...insightsData,
+      daily: combinedInsights,
+    },
+    summary,
   };
 }

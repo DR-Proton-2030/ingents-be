@@ -285,9 +285,11 @@ export const getSinglePostAnalyticsService = async (
 
     // 2. Fetch insights
     const isReel = mediaData.media_product_type === "REELS";
+    
+    // As of API v22.0, "views" is preferred over "impressions"
     const metrics = isReel 
       ? "reach,saved,shares,total_interactions"
-      : "impressions,reach,saved,shares,total_interactions";
+      : "views,reach,saved,total_interactions";
 
     let insightsData = null;
     try {
@@ -299,7 +301,20 @@ export const getSinglePostAnalyticsService = async (
       });
       insightsData = data.data;
     } catch (err: any) {
-      console.warn(`Insights failed for ${postId}:`, err.response?.data || err.message);
+      // If combined fail, try basic ones
+      console.warn(`Insights failed for ${postId}, trying basic metrics:`, err.response?.data || err.message);
+      try {
+        const fallbackMetrics = "reach,saved";
+        const { data } = await axios.get(`${BASE_URL}/${postId}/insights`, {
+          params: {
+            metric: fallbackMetrics,
+            access_token: accessToken,
+          }
+        });
+        insightsData = data.data;
+      } catch (innerErr) {
+         console.warn(`Fallback insights also failed for ${postId}`);
+      }
     }
 
     return {
@@ -309,7 +324,7 @@ export const getSinglePostAnalyticsService = async (
         name: item.name,
         period: item.period,
         values: item.values
-      })) : null,
+      })) : [],
     };
   } catch (error: any) {
     console.error("Error fetching Instagram post analytics:", error.response?.data || error.message);
@@ -322,32 +337,237 @@ export const getInstagramAccountInsightsService = async (
   accessToken: string
 ) => {
   try {
-    const dailyMetrics = "impressions,reach,profile_views,follower_count";
-    const lifetimeMetrics = "audience_city,audience_country,audience_gender_age,audience_locale";
+    const dailyMetrics = "views,reach,profile_views,follower_count";
+    const lifetimeMetrics = "follower_demographics";
 
-    const [dailyRes, lifetimeRes] = await Promise.all([
-      axios.get(`${BASE_URL}/${igUserId}/insights`, {
-        params: { metric: dailyMetrics, period: "day", access_token: accessToken }
-      }).catch(err => ({ data: { data: [] } })),
-      axios.get(`${BASE_URL}/${igUserId}/insights`, {
-        params: { metric: lifetimeMetrics, period: "lifetime", access_token: accessToken }
-      }).catch(err => {
-        const errorData = err.response?.data?.error;
-        if (errorData?.code === 10 || errorData?.message?.includes('100 followers')) {
-          return { data: { data: [], note: "Audience demographics require at least 100 followers." } };
-        }
-        return { data: { data: [] } };
-      })
+    // 1. Fetch Profile info (always good to have total counts)
+    const profile = await getInstagramProfile(igUserId, accessToken).catch(
+      () => null
+    );
+
+    // For daily insights, we can request a range (last 30 days)
+    const until = Math.floor(Date.now() / 1000);
+    const since = until - 30 * 24 * 60 * 60;
+
+    const [dailyTotalRes, breakdownMediaRes, breakdownFollowRes, dailySeriesRes] = await Promise.all([
+      // 1. Metrics that require metric_type=total_value
+      axios
+        .get(`${BASE_URL}/${igUserId}/insights`, {
+          params: {
+            metric: "views,reach,profile_views,total_interactions",
+            period: "day",
+            metric_type: "total_value",
+            since,
+            until,
+            access_token: accessToken,
+          },
+        })
+        .catch((err) => {
+          console.error("Daily Totals error:", err.response?.data || err.message);
+          return { data: { data: [] } };
+        }),
+      // 2. Media Product Type Breakdown
+      axios
+        .get(`${BASE_URL}/${igUserId}/insights`, {
+          params: {
+            metric: "views,reach,total_interactions",
+            period: "day",
+            metric_type: "total_value",
+            breakdown: "media_product_type",
+            since,
+            until,
+            access_token: accessToken,
+          },
+        })
+        .catch(() => ({ data: { data: [] } })),
+      // 3. Follow Type Breakdown
+      axios
+        .get(`${BASE_URL}/${igUserId}/insights`, {
+          params: {
+            metric: "views,reach,total_interactions",
+            period: "day",
+            metric_type: "total_value",
+            breakdown: "follow_type",
+            since,
+            until,
+            access_token: accessToken,
+          },
+        })
+        .catch(() => ({ data: { data: [] } })),
+      // 4. Metrics that are strictly time-series (like follower_count)
+      axios
+        .get(`${BASE_URL}/${igUserId}/insights`, {
+          params: {
+            metric: "follower_count",
+            period: "day",
+            since,
+            until,
+            access_token: accessToken,
+          },
+        })
+        .catch((err) => {
+          console.error("Daily Series error:", err.response?.data || err.message);
+          return { data: { data: [] } };
+        }),
     ]);
+    // 4. Fetch Audience Demographics (Individual breakdowns for reliability)
+    let processedAudience: any = {};
+    try {
+      const breakdownNames = ["city", "country", "gender", "age"];
+      const demoResponses = await Promise.all(
+        breakdownNames.map((b) =>
+          axios
+            .get(`${BASE_URL}/${igUserId}/insights`, {
+              params: {
+                metric: "follower_demographics",
+                period: "lifetime",
+                metric_type: "total_value",
+                breakdown: b,
+                access_token: accessToken,
+              },
+            })
+            .catch((err) => {
+              console.warn(
+                `[InstagramService] Demographic ${b} failed:`,
+                err.response?.data || err.message
+              );
+              return { data: { data: [] } };
+            })
+        )
+      );
+
+      demoResponses.forEach((res, idx) => {
+        const dimension = breakdownNames[idx];
+        const items = res.data?.data || [];
+        items.forEach((item: any) => {
+          const results = item.total_value?.breakdowns?.[0]?.results;
+          if (results) {
+            if (!processedAudience[dimension]) processedAudience[dimension] = {};
+            results.forEach((r: any) => {
+              const label = Object.values(r.dimension_values || {})[0] as string;
+              if (label) processedAudience[dimension][label] = r.value;
+            });
+          } else if (item.values?.[0]?.value) {
+            processedAudience[dimension] = item.values[0].value;
+          }
+        });
+      });
+    } catch (err: any) {
+      console.warn("Demographics fetch failed entirely:", err.message);
+    }
+
+    const dailyData = [
+      ...(dailyTotalRes.data?.data || []),
+      ...(dailySeriesRes.data?.data || []),
+    ];
+
+    // Helper to extract breakdown value
+    const getBreakdownVal = (metricData: any, dimensionValue: string) => {
+      const breakdown = metricData?.total_value?.breakdowns?.[0];
+      if (!breakdown) return 0;
+      const result = breakdown.results?.find((r: any) => 
+        r.dimension_values?.includes(dimensionValue) || 
+        Object.values(r.dimension_values || {}).includes(dimensionValue)
+      );
+      return result?.value || 0;
+    };
+
+    // Calculate sum for summary (handling both total_value and values array)
+    const summary: any = {};
+    dailyData.forEach((metric: any) => {
+      let sum = 0;
+      if (metric.total_value) {
+        sum = metric.total_value.value || 0;
+      } else if (Array.isArray(metric.values)) {
+        sum = metric.values.reduce((acc: number, v: any) => acc + (v.value || 0), 0);
+      }
+      summary[metric.name] = sum;
+    });
+
+    const detailedInsights: any = {
+      views: { total: summary.views || 0, followersPercentage: 0, nonFollowersPercentage: 0 },
+      accountsReached: summary.reach || 0,
+      reachByContentType: { posts: 0, stories: 0, reels: 0 },
+      interactions: { total: summary.total_interactions || 0, followersPercentage: 0, nonFollowersPercentage: 0 },
+      interactionsByContentType: { posts: 0, reels: 0, stories: 0 },
+    };
+
+    // Process Media Type Breakdowns
+    if (breakdownMediaRes.data?.data) {
+      breakdownMediaRes.data.data.forEach((metric: any) => {
+        const reels = getBreakdownVal(metric, "REELS");
+        const stories = getBreakdownVal(metric, "STORY");
+        const feed = getBreakdownVal(metric, "FEED");
+
+        if (metric.name === "reach") {
+          detailedInsights.reachByContentType.reels = reels;
+          detailedInsights.reachByContentType.stories = stories;
+          detailedInsights.reachByContentType.posts = feed;
+        }
+        if (metric.name === "total_interactions") {
+          detailedInsights.interactionsByContentType.reels = reels;
+          detailedInsights.interactionsByContentType.stories = stories;
+          detailedInsights.interactionsByContentType.posts = feed;
+        }
+      });
+    }
+
+    // Process Follow Type Breakdowns
+    if (breakdownFollowRes.data?.data) {
+      breakdownFollowRes.data.data.forEach((metric: any) => {
+        const followers = getBreakdownVal(metric, "FOLLOWER");
+        const nonFollowers = getBreakdownVal(metric, "NON_FOLLOWER");
+        const total = followers + nonFollowers;
+        
+        if (total > 0) {
+          const fPerc = Math.round((followers / total) * 100);
+          const nfPerc = 100 - fPerc;
+
+          if (metric.name === "views") {
+            detailedInsights.views.followersPercentage = fPerc;
+            detailedInsights.views.nonFollowersPercentage = nfPerc;
+          }
+          if (metric.name === "total_interactions") {
+            detailedInsights.interactions.followersPercentage = fPerc;
+            detailedInsights.interactions.nonFollowersPercentage = nfPerc;
+          }
+        }
+      });
+    }
+
+    // Results are already processed into processedAudience above
 
     return {
-      daily: dailyRes.data.data,
-      audience: lifetimeRes.data.data,
-      note: (lifetimeRes.data as any).note || null
+      profile: profile
+        ? {
+            followersCount: profile.followers_count || 0,
+            followsCount: profile.follows_count || 0,
+            mediaCount: profile.media_count || 0,
+            username: profile.username,
+            name: profile.name,
+            profile_picture_url: profile.profile_picture_url,
+          }
+        : null,
+      daily: dailyData,
+      audience: {
+        followers: profile?.followers_count || 0,
+        demographics: processedAudience,
+      },
+      summary,
+      detailedInsights,
+      note: Object.keys(processedAudience).length === 0 ? "Audience demographics may require at least 100 followers." : null,
     };
   } catch (error: any) {
-    console.error("Account insights service error:", error.response?.data || error.message);
-    return null;
+    console.error(
+      "Account insights service error:",
+      error.response?.data || error.message
+    );
+    return {
+      daily: [],
+      audience: {},
+      summary: {},
+      note: "Failed to fetch account insights service.",
+    };
   }
 };
 /**

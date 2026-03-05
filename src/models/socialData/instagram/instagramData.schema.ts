@@ -14,6 +14,7 @@ const instagramOverviewSchema = new Schema(
     profileViews: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
     impressions: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
     reach: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
+    views: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
   },
   { _id: true }
 );
@@ -89,6 +90,7 @@ const instagramInsightsSchema = new Schema(
     },
     topContentByViews: [instagramContentItemSchema],
     topContentByInteractions: [instagramContentItemSchema],
+    daily: { type: [Schema.Types.Mixed], default: [] },
   },
   { _id: true }
 );
@@ -99,6 +101,7 @@ export const instagramMetricsSchema = new Schema(
     content: instagramContentSchema,
     audience: instagramAudienceSchema,
     insights: instagramInsightsSchema,
+    summary: { type: Schema.Types.Mixed, default: {} },
     insights_history: {
       type: [new Schema({
         date: { type: Date, required: true },

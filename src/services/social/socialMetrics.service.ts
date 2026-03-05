@@ -63,7 +63,9 @@ export async function fetchSocialMetrics(userId: string): Promise<{
         }
 
         items.push({
-          platform: doc.platform_name,
+          platform: (doc.platform_name === "instagram_business" || doc.platform_name === "instagram") 
+            ? "instagram" 
+            : doc.platform_name,
           metric,
           count,
           last_synced_at: doc.last_synced_at,

@@ -39,6 +39,7 @@ export const fetchAndStoreInstagramData = async (userId: string) => {
           "data.content": resultData.content,
           "data.audience": resultData.audience,
           "data.insights": resultData.insights,
+          "data.summary": resultData.summary,
           is_active: true,
           last_synced_at: new Date(),
           updatedAt: new Date(),
