@@ -99,6 +99,16 @@ export const instagramMetricsSchema = new Schema(
     content: instagramContentSchema,
     audience: instagramAudienceSchema,
     insights: instagramInsightsSchema,
+    insights_history: {
+      type: [new Schema({
+        date: { type: Date, required: true },
+        impressions: Number,
+        reach: Number,
+        profile_views: Number,
+        follower_count: Number,
+      }, { _id: false })],
+      default: []
+    }
   },
   { _id: true }
 );

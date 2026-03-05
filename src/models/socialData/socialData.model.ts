@@ -22,8 +22,14 @@ SocialDataModel.discriminator(
 );
 
 // Instagram strict schema
+// SocialDataModel.discriminator(
+//   "instagram",
+//   new Schema({ data: instagramMetricsSchema }, { _id: false })
+// );
+
+// Instagram Business strict schema
 SocialDataModel.discriminator(
-  "instagram",
+  "instagram_business",
   new Schema({ data: instagramMetricsSchema }, { _id: false })
 );
 

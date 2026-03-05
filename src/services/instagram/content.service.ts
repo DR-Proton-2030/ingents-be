@@ -2,84 +2,85 @@ import axios from "axios";
 import PostedContentModel from "../../models/postedContent/postedContent.model";
 import UserModel from "../../models/users/users.model";
 
+const BASE_URL = "https://graph.facebook.com/v20.0";
+
 interface PostAnalytics {
   likes: number;
   comments: number;
   shares: number;
   views: number;
+  saved: number;
 }
 
+/**
+ * Fetch detailed analytics for a Business IG post (v20.0)
+ */
 export async function getIgPostAnalytics(
   mediaId: string,
   accessToken: string,
 ): Promise<PostAnalytics> {
   try {
-    let likes = 0;
-    let comments = 0;
-    let shares = 0;
+    // 1. Fetch Basic Metrics
+    const { data: mediaData } = await axios.get(`${BASE_URL}/${mediaId}`, {
+      params: {
+        fields: "like_count,comments_count,media_product_type",
+        access_token: accessToken,
+      },
+    });
+
+    // 2. Fetch Insights (Impressions, Reach, Saved, Shares)
+    const isReel = mediaData.media_product_type === "REELS";
+    const metric = isReel 
+      ? "reach,saved,shares,total_interactions" 
+      : "impressions,reach,saved,shares,total_interactions";
+
     let views = 0;
+    let shares = 0;
+    let saved = 0;
 
-    const { data: mediaData } = await axios.get(
-      `https://graph.instagram.com/${mediaId}`,
-      {
-        params: {
-          fields: "like_count,comments_count",
-          access_token: accessToken,
-        },
-      }
-    );
-
-    likes = mediaData.like_count || 0;
-    comments = mediaData.comments_count || 0;
-
-    // For views (impressions) and shares
     try {
-      const { data: insightsRes } = await axios.get(
-        `https://graph.instagram.com/${mediaId}/insights`,
-        {
-          params: {
-            metric: "impressions,reach,shares,plays",
-            access_token: accessToken,
-          },
-        }
-      );
+      const { data: insightsRes } = await axios.get(`${BASE_URL}/${mediaId}/insights`, {
+        params: { metric, access_token: accessToken },
+      });
+      
       if (insightsRes && insightsRes.data) {
-        insightsRes.data.forEach((metric: any) => {
-          if (metric.name === "impressions" || metric.name === "plays") {
-             views = Math.max(views, metric.values?.[0]?.value || 0);
-          }
-          if (metric.name === "shares") {
-             shares = metric.values?.[0]?.value || 0;
-          }
+        insightsRes.data.forEach((item: any) => {
+          const val = item.values?.[0]?.value || 0;
+          if (item.name === "impressions" || item.name === "reach") views = Math.max(views, val);
+          if (item.name === "shares") shares = val;
+          if (item.name === "saved") saved = val;
         });
       }
-    } catch (e) {
-      // Not all media types support insights (e.g., standard images might not support 'plays' or 'shares')
-      // Or might be deprecated in some graph versions natively, we silently catch.
+    } catch (e: any) {
+      console.warn(`[ContentService] Insights unavailable for IG post ${mediaId}`);
     }
 
-    return { likes, comments, shares, views };
+    return { 
+      likes: mediaData.like_count || 0, 
+      comments: mediaData.comments_count || 0, 
+      shares, 
+      views,
+      saved 
+    };
 
   } catch (err: any) {
-    console.error(`IG Graph API error for ${mediaId}:`, err.response?.data || err.message);
+    console.error(`[ContentService] IG API error for ${mediaId}:`, err.response?.data || err.message);
     throw err;
   }
 }
 
 /**
- * Finds all Instagram posts in PostedContentModel for a user,
- * fetches their latest engagement metrics, and updates the database.
+ * Update engagement metrics for all published Instagram posts for a user
  */
 export async function updateInstagramAllPostsEngagement(userId: string) {
   try {
     const user = await UserModel.findById(userId).exec();
     if (!user || !user.instagram?.access_token) {
-      console.log(`No Instagram access token for user ${userId}`);
+      console.log(`[ContentService] No Instagram token for user ${userId}`);
       return;
     }
 
     const accessToken = user.instagram.access_token;
-
     const posts = await PostedContentModel.find({
       user_id: userId,
       platform: "instagram",
@@ -87,16 +88,13 @@ export async function updateInstagramAllPostsEngagement(userId: string) {
       platform_post_id: { $ne: null },
     });
 
-    if (!posts.length) {
-      console.log(`No Instagram posts found for user ${userId}`);
-      return;
-    }
+    if (!posts.length) return;
 
-    for (const post of posts) {
+    // Use Promise.all for parallel processing for better performance
+    await Promise.all(posts.map(async (post) => {
       try {
-        const postId = post.platform_post_id!;
-        const analytics = await getIgPostAnalytics(postId, accessToken);
-
+        const analytics = await getIgPostAnalytics(post.platform_post_id!, accessToken);
+        
         await PostedContentModel.findByIdAndUpdate(post._id, {
           $set: {
             engagement: {
@@ -104,20 +102,18 @@ export async function updateInstagramAllPostsEngagement(userId: string) {
               comments: analytics.comments,
               shares: analytics.shares,
               views: analytics.views,
+              saved: analytics.saved,
             },
           },
         });
       } catch (postErr: any) {
-        console.error(
-          `Failed to update engagement for IG post ${post.platform_post_id}:`,
-          postErr.message,
-        );
+        console.warn(`[ContentService] Failed update for IG post ${post.platform_post_id}:`, postErr.message);
       }
-    }
+    }));
 
-    console.log(`Successfully updated engagement for ${posts.length} Instagram posts`);
+    console.log(`[ContentService] Updated engagement for ${posts.length} IG posts for user ${userId}`);
   } catch (err: any) {
-    console.error("Error in updateInstagramAllPostsEngagement:", err);
+    console.error("[ContentService] Error in updateInstagramAllPostsEngagement:", err);
     throw err;
   }
 }

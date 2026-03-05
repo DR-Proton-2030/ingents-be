@@ -15,6 +15,8 @@ import {
   publishInstagramMedia,
   getSinglePostAnalyticsService,
   getInstagramAccountInsightsService,
+  getInstagramBusinessAccountId,
+  getFacebookUserProfile,
 } from "../../../../services/instagram/instagram.service";
 import UserModel from "../../../../models/users/users.model";
 import PostedContentModel from "../../../../models/postedContent/postedContent.model";
@@ -42,16 +44,45 @@ export const instagramAuthCallback = async (req: Request, res: Response) => {
 
     if (userId) {
       try {
-        const profile = await getInstagramProfile(tokens.access_token);
+        // Exchange short-lived for long-lived token immediately
+        const longTokenResponse = await getInstagramLongLivedToken(tokens.access_token);
+        const longLivedToken = longTokenResponse.access_token;
+
+        // 1. Always store the Facebook User (store user as well)
+        const fbProfile = await getFacebookUserProfile(longLivedToken);
         await UserModel.findByIdAndUpdate(userId, {
           $set: {
-            "instagram.project_id": profile.id,
-            "instagram.name":  profile.username,
-            "instagram.access_token": tokens.access_token,
+            "facebook.project_id": fbProfile.id,
+            "facebook.name": fbProfile.name,
+            "facebook.access_token": longLivedToken,
           },
         });
-      } catch (profileError) {
-        console.error("Failed to store Instagram profile details:", profileError);
+
+        // 2. Try to resolve Business API mapping: Get the IG Business ID from the Facebook Page
+        try {
+          const businessAccount = await getInstagramBusinessAccountId(longLivedToken);
+          const profile = await getInstagramProfile(businessAccount.id, longLivedToken);
+          
+          await UserModel.findByIdAndUpdate(userId, {
+            $set: {
+              "instagram.project_id": businessAccount.id,
+              "instagram.name":  profile.username || businessAccount.username,
+              "instagram.access_token": longLivedToken, 
+              "instagram.refresh_token": longLivedToken,
+            },
+          });
+        } catch (igError: any) {
+          console.warn("[AuthCallback] FB stored, but IG Business missing:", igError.message);
+          // Redirect with error message so user knows why IG part failed
+          return res.redirect(
+            `${process.env.FRONTEND_URL}/dashboard/social-media?platform=instagram&error=${encodeURIComponent(igError.message)}&user_id=${userId}`
+          );
+        }
+      } catch (profileError: any) {
+        console.error("Failed to store profile details:", profileError.message);
+        return res.redirect(
+          `${process.env.FRONTEND_URL}/dashboard/social-media?platform=instagram&error=${encodeURIComponent(profileError.message)}&user_id=${userId}`
+        );
       }
     }
 
@@ -80,17 +111,27 @@ export const fetchInstagramProfileController = async (
       return res.status(400).json({ error: "Missing userId in query" });
     }
 
+    // 1. Get Long Lived Token
     const longTokenResponse = await getInstagramLongLivedToken(access_token);
-    console.log(longTokenResponse);
     const longLivedToken = longTokenResponse.access_token;
+
+    // 2. Resolve Business Account (in case it wasn't saved or needs refresh)
+    const businessAccount = await getInstagramBusinessAccountId(longLivedToken);
 
     const [savedUser, profile] = await Promise.all([
       UserModel.findByIdAndUpdate(
         userId,
-        { $set: { "instagram.access_token": longLivedToken } },
+        { 
+          $set: { 
+            "instagram.access_token": longLivedToken,
+            "instagram.refresh_token": longLivedToken,
+            "instagram.project_id": businessAccount.id,
+            "instagram.name": businessAccount.username
+          } 
+        },
         { new: true }
       ),
-      getInstagramProfile(longLivedToken),
+      getInstagramProfile(businessAccount.id, longLivedToken),
     ]);
     console.log(savedUser);
     res.status(200).json({
@@ -306,6 +347,7 @@ export const disconnectInstagram = async (req: Request, res: Response) => {
           "instagram.project_id": null,
           "instagram.name": null,
           "instagram.access_token": null,
+          "instagram.refresh_token": null,
         },
       },
       { new: true },
@@ -313,10 +355,9 @@ export const disconnectInstagram = async (req: Request, res: Response) => {
 
     if (tokenToRevoke) {
       try {
-        // Revoke app permissions for the user
-        // Using graph.instagram.com as tokens are now native to this endpoint
-        await axios.delete(`https://graph.instagram.com/v18.0/me/permissions`, {
-          headers: { Authorization: `Bearer ${tokenToRevoke}` },
+        // Revoke app permissions for the user via Facebook Graph
+        await axios.delete(`https://graph.facebook.com/v20.0/me/permissions`, {
+          params: { access_token: tokenToRevoke }
         });
       } catch (revokeErr: any) {
         console.warn(

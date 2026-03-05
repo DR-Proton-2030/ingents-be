@@ -41,18 +41,23 @@ export async function fetchSocialMetrics(userId: string): Promise<{
           metric = "followers";
         } else if (doc.platform_name === "x") {
           // X (Twitter) followers are in public_metrics
-          count = Number(doc.data?.public_metrics?.followers_count || 0);
-          metric = "metric" in (doc.data || {}) ? doc.data.metric : "followers"; // fallback for different possible structures
           if (doc.data?.public_metrics?.followers_count !== undefined) {
-             count = Number(doc.data.public_metrics.followers_count);
-          } else if (typeof doc.data === 'number') {
-             count = doc.data;
+            count = Number(doc.data.public_metrics.followers_count);
+          } else if (typeof doc.data === "number") {
+            count = doc.data;
+          } else {
+            count = Number(doc.data?.followers_count || 0);
           }
           metric = "followers";
-        } else if (doc.platform_name === "instagram") {
+        } else if (
+          doc.platform_name === "instagram_business" ||
+          doc.platform_name === "instagram"
+        ) {
           // Instagram followers
           count = Number(
-            doc.data?.overview?.followersCount || doc.data?.business_discovery?.followers_count || 0,
+            doc.data?.overview?.followersCount ||
+              doc.data?.business_discovery?.followers_count ||
+              0
           );
           metric = "followers";
         }

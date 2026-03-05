@@ -11,7 +11,7 @@ const socialDataSchema: Schema<ISocialData> = new Schema<ISocialData>(
     },
     platform_name: {
       ...SCHEMA_DEFINITION_PROPERTY.requiredString,
-      enum: ["youtube", "facebook", "x", "instagram"],
+      enum: ["youtube", "facebook", "x", "instagram", "instagram_business"],
     },
     platform_id: SCHEMA_DEFINITION_PROPERTY.requiredString,
     data: {

@@ -137,7 +137,7 @@ export interface IYouTubeData {
 export interface ISocialData {
   _id: string;
   user_object_id: Types.ObjectId;
-  platform_name: "youtube" | "facebook" | "x" | "instagram";
+  platform_name: "youtube" | "facebook" | "x" | "instagram" | "instagram_business";
   platform_id: string;
   data: IYouTubeAllDeta | any; // Platform specific metrics (e.g. YouTube stats)
   is_active: boolean;

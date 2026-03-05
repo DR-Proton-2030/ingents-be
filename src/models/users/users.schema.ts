@@ -28,6 +28,7 @@ const userSchema: Schema<IUser> = new Schema<IUser>(
       project_id: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
       name: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
       access_token: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+      refresh_token: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     },
     youtube: {
       project_id: SCHEMA_DEFINITION_PROPERTY.optionalNullString,

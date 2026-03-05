@@ -1,5 +1,9 @@
-import axios from "axios";
 import UserModel from "../../models/users/users.model";
+import { 
+  createInstagramMedia, 
+  getInstagramMediaStatus, 
+  publishInstagramMedia 
+} from "./instagram.service";
 
 export interface PostToInstagramParams {
   userId: string;
@@ -9,7 +13,7 @@ export interface PostToInstagramParams {
 }
 
 /**
- * Post content to Instagram - used by scheduler
+ * Post content to Instagram - used by scheduler (Business API v20.0)
  */
 export const postToInstagram = async ({
   userId,
@@ -17,20 +21,16 @@ export const postToInstagram = async ({
   mediaUrls,
   hashtags,
 }: PostToInstagramParams) => {
-  // Get user and access token
+  // 1. Get user and credentials
   const user = await UserModel.findById(userId).exec();
-  if (!user || !user.instagram?.access_token) {
-    throw new Error("Instagram user access token not found");
+  if (!user || !user.instagram?.access_token || !user.instagram?.project_id) {
+    throw new Error("Instagram credentials not found or incomplete");
   }
 
   const accessToken = user.instagram.access_token;
   const igUserId = user.instagram.project_id;
 
-  if (!igUserId) {
-    throw new Error("Instagram user ID not found");
-  }
-
-  // Append hashtags to message
+  // 2. Prepare caption
   let caption = message;
   if (hashtags && hashtags.length > 0) {
     caption += "\n\n" + hashtags.map((tag) => (tag.startsWith("#") ? tag : `#${tag}`)).join(" ");
@@ -43,73 +43,46 @@ export const postToInstagram = async ({
   const mediaUrl = mediaUrls[0];
   const isVideo = mediaUrl.includes("video") || mediaUrl.match(/\.(mp4|mov|avi|wmv|webm)$/i);
 
-  // Create media container
-  const containerPayload: any = {
+  // 3. Create media container
+  const container = await createInstagramMedia({
+    accessToken,
+    igUserId,
+    imageUrl: isVideo ? undefined : mediaUrl,
+    videoUrl: isVideo ? mediaUrl : undefined,
     caption,
-  };
+    mediaType: isVideo ? "REELS" : "IMAGE",
+  });
 
-  if (isVideo) {
-    containerPayload.media_type = "REELS";
-    containerPayload.video_url = mediaUrl;
-  } else {
-    containerPayload.image_url = mediaUrl;
-  }
+  const containerId = container.id;
 
-  const createContainerRes = await axios.post(
-    `https://graph.instagram.com/v18.0/${igUserId}/media`,
-    containerPayload,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
-
-  const containerId = createContainerRes.data.id;
-
-  // For videos, we need to wait for processing
+  // 4. For videos/reels, wait for processing to finish
   if (isVideo) {
     let status = "IN_PROGRESS";
     let attempts = 0;
-    const maxAttempts = 30; // 5 minutes max wait
-
-    while (status === "IN_PROGRESS" && attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, 10000)); // Wait 10 seconds
-
-      const statusRes = await axios.get(
-        `https://graph.instagram.com/v18.0/${containerId}?fields=status_code`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-
-      status = statusRes.data.status_code;
+    while (status !== "FINISHED" && attempts < 40) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      const statusData = await getInstagramMediaStatus({
+        accessToken,
+        containerId: containerId,
+      });
+      status = statusData.status_code || statusData.status;
+      if (status === "ERROR") throw new Error("Instagram video processing failed");
+      if (status === "FINISHED") break;
       attempts++;
     }
-
     if (status !== "FINISHED") {
-      throw new Error(`Video processing failed or timed out. Status: ${status}`);
+      throw new Error(`Video processing timed out with status: ${status}`);
     }
   }
 
-  // Publish the media
-  const publishRes = await axios.post(
-    `https://graph.instagram.com/v18.0/${igUserId}/media_publish`,
-    {
-      creation_id: containerId,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
+  // 5. Publish the media
+  const published = await publishInstagramMedia({
+    accessToken,
+    igUserId,
+    containerId: containerId,
+  });
 
-  return publishRes.data;
+  return published;
 };
 
 export * from "./instagram.service";
