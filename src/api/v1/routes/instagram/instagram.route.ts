@@ -7,7 +7,6 @@ import {
   publishInstagramPost,
   postInstagramUniversal,
   disconnectInstagram,
-  getSinglePostAnalytics,
 } from "../../controller/instagram/instagram.controller";
 
 const storage = multer.memoryStorage();
@@ -31,6 +30,5 @@ instagramRouter.post(
 );
 
 instagramRouter.post("/disconnect", disconnectInstagram);
-instagramRouter.get("/post/:postId/analytics", getSinglePostAnalytics);
 
 export default instagramRouter;

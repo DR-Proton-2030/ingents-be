@@ -23,10 +23,9 @@ export async function buildInstagramDashboardBuilder(
   }
 
   // 2. Fetch Media Content (Posts)
-  // GET /{ig-user-id}/media?fields=id,caption,media_type,media_product_type,media_url,permalink,timestamp,like_count,comments_count
   const mediaUrl = `${BASE_URL}/${igUserId}/media`;
   const mediaParams = {
-    fields: "id,media_type,media_product_type,media_url,permalink,timestamp,caption,like_count,comments_count",
+    fields: "id,media_type,media_product_type,media_url,permalink,timestamp,caption,like_count,comments_count,thumbnail_url,shortcode,children{media_url,media_type}",
     access_token: accessToken,
     limit: 50,
   };
@@ -36,27 +35,41 @@ export async function buildInstagramDashboardBuilder(
     const { data: mediaListResponse } = await axios.get(mediaUrl, { params: mediaParams });
     const rawMedia = mediaListResponse.data || [];
     
-    // Fetch insights for each post in parallel (Batch optimization)
+    // Fetch insights for each post in parallel (Optimized: passing the post object to avoid re-fetch)
     publishedContent = await Promise.all(rawMedia.map(async (post: any) => {
-      let insights = [];
+      let analytics: any = null;
       try {
-        const analytics = await getSinglePostAnalyticsService(post.id, accessToken);
-        insights = analytics.insights || [];
+        analytics = await getSinglePostAnalyticsService(post, accessToken);
       } catch (e) {
         console.warn(`[DashboardBuilder] Insights failed for post ${post.id}`);
       }
+
+      // Handle Carousel (Children)
+      const childUrls = post.children?.data?.map((child: any) => child.media_url) || [];
 
       return {
         id: post.id,
         media_type: post.media_type,
         media_product_type: post.media_product_type || "",
         media_url: post.media_url,
+        media_urls: childUrls.length > 0 ? childUrls : [post.media_url],
         permalink: post.permalink,
         timestamp: post.timestamp,
         caption: post.caption,
         like_count: post.like_count || 0,
         comments_count: post.comments_count || 0,
-        insights
+        shares_count: analytics?.interaction_counts?.shares || 0,
+        save_count: analytics?.interaction_counts?.saves || 0,
+        reposts_count: analytics?.interaction_counts?.reposts || 0,
+        thumbnail_url: analytics?.media?.thumbnail_url || post.thumbnail_url || "",
+        shortcode: analytics?.media?.shortcode || post.shortcode || "",
+        overview: {
+          views: analytics?.overview?.views || 0,
+          accounts_reached: analytics?.overview?.reach || 0,
+          watch_time_total: analytics?.overview?.watch_time || 0,
+          average_watch_time: analytics?.overview?.avg_watch_time || 0,
+          interactions: analytics?.overview?.interactions || 0
+        }
       };
     }));
   } catch (err) {
@@ -86,24 +99,13 @@ export async function buildInstagramDashboardBuilder(
     let totalInteractions = 0;
     const sortedByInteractions = [...publishedContent].sort((a, b) => {
       const getInter = (post: any) => {
-        let val = (post.like_count || 0) + (post.comments_count || 0);
-        const meta = post.insights?.find(
-          (i: any) => i.name === "total_interactions"
-        );
-        if (meta?.values?.[0]?.value) val = meta.values[0].value;
-        return val;
+        return post.overview?.interactions || (post.like_count || 0) + (post.comments_count || 0);
       };
       return getInter(b) - getInter(a);
     });
 
     sortedByInteractions.forEach((post) => {
-      let interactions = (post.like_count || 0) + (post.comments_count || 0);
-      const totalInterObj = post.insights?.find(
-        (i: any) => i.name === "total_interactions"
-      );
-      if (totalInterObj?.values?.[0]?.value)
-        interactions = totalInterObj.values[0].value;
-      totalInteractions += interactions;
+      totalInteractions += post.overview?.interactions || (post.like_count || 0) + (post.comments_count || 0);
     });
 
     insightsData.interactions.total = totalInteractions;
@@ -111,10 +113,7 @@ export async function buildInstagramDashboardBuilder(
     
     const sortedByViews = [...publishedContent].sort((a, b) => {
       const getViews = (post: any) => {
-        const viewsObj = post.insights?.find(
-          (i: any) => i.name === "views" || i.name === "impressions"
-        );
-        return viewsObj?.values?.[0]?.value || 0;
+        return post.overview?.views || 0;
       };
       return getViews(b) - getViews(a);
     });

@@ -21,6 +21,7 @@ export async function fetchSocialMetrics(userId: string): Promise<{
     // Fetch all social data records for the user from the database
     const allSocialData = await SocialDataModel.find({
       user_object_id: userId,
+      is_active: true
     }).exec();
 
     // Map each platform's data to the requested metrics format

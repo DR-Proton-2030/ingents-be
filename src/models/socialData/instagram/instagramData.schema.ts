@@ -31,7 +31,18 @@ const instagramContentItemSchema = new Schema(
     caption: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     like_count: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
     comments_count: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
-    insights: { type: [Schema.Types.Mixed], default: [] },
+    shares_count: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
+    save_count: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
+    reposts_count: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
+    thumbnail_url: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+    shortcode: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+    overview: {
+      views: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
+      accounts_reached: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
+      watch_time_total: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
+      average_watch_time: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
+      interactions: SCHEMA_DEFINITION_PROPERTY.optionalNullNumber,
+    },
   },
   { _id: true }
 );
