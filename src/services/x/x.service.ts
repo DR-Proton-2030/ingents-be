@@ -5,9 +5,6 @@ import UserModel from "../../models/users/users.model";
 
 dotenv.config();
 
-const X_CLIENT_ID = process.env.X_CLIENT_ID!;
-const X_CLIENT_SECRET = process.env.X_CLIENT_SECRET; // optional for PKCE
-const X_REDIRECT_URI = process.env.X_REDIRECT_URI!;
 const X_OAUTH_AUTHORIZE = "https://twitter.com/i/oauth2/authorize";
 const X_OAUTH_TOKEN = "https://api.twitter.com/2/oauth2/token";
 
@@ -28,6 +25,14 @@ export function generatePKCE() {
 }
 
 export const getXAuthURL = async (userId: string) => {
+  const clientId = process.env.X_CLIENT_ID;
+  const redirectUri = process.env.X_REDIRECT_URI;
+
+  if (!clientId || !redirectUri) {
+    console.error("Missing X env vars:", { clientId, redirectUri });
+    throw new Error("X_CLIENT_ID or X_REDIRECT_URI is missing in .env");
+  }
+
   const { verifier, challenge, method } = generatePKCE();
   // Store verifier for callback
   await UserModel.findByIdAndUpdate(userId, {
@@ -44,8 +49,8 @@ export const getXAuthURL = async (userId: string) => {
 
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: X_CLIENT_ID,
-    redirect_uri: X_REDIRECT_URI,
+    client_id: clientId,
+    redirect_uri: redirectUri,
     scope,
     state,
     code_challenge: challenge,
@@ -56,6 +61,10 @@ export const getXAuthURL = async (userId: string) => {
 };
 
 export const exchangeCodeForTokens = async (code: string, userId: string) => {
+  const clientId = process.env.X_CLIENT_ID!;
+  const clientSecret = process.env.X_CLIENT_SECRET;
+  const redirectUri = process.env.X_REDIRECT_URI!;
+
   const user = await UserModel.findById(userId);
   const verifier = user?.x?.pkce_verifier;
   if (!verifier) {
@@ -64,15 +73,15 @@ export const exchangeCodeForTokens = async (code: string, userId: string) => {
 
   const body = new URLSearchParams({
     grant_type: "authorization_code",
-    client_id: X_CLIENT_ID,
-    redirect_uri: X_REDIRECT_URI,
+    client_id: clientId,
+    redirect_uri: redirectUri,
     code_verifier: verifier,
     code,
   }).toString();
 
   const headers: any = { "Content-Type": "application/x-www-form-urlencoded" };
-  if (X_CLIENT_SECRET) {
-    const basic = Buffer.from(`${X_CLIENT_ID}:${X_CLIENT_SECRET}`).toString(
+  if (clientSecret) {
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString(
       "base64",
     );
     headers["Authorization"] = `Basic ${basic}`;
@@ -93,19 +102,22 @@ export const exchangeCodeForTokens = async (code: string, userId: string) => {
 };
 
 export const refreshXToken = async (userId: string) => {
+  const clientId = process.env.X_CLIENT_ID!;
+  const clientSecret = process.env.X_CLIENT_SECRET;
+
   const user = await UserModel.findById(userId);
   const refresh_token = user?.x?.refresh_token;
   if (!refresh_token) throw new Error("Missing refresh token");
 
   const body = new URLSearchParams({
     grant_type: "refresh_token",
-    client_id: X_CLIENT_ID,
+    client_id: clientId,
     refresh_token,
   }).toString();
 
   const headers: any = { "Content-Type": "application/x-www-form-urlencoded" };
-  if (X_CLIENT_SECRET) {
-    const basic = Buffer.from(`${X_CLIENT_ID}:${X_CLIENT_SECRET}`).toString(
+  if (clientSecret) {
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString(
       "base64",
     );
     headers["Authorization"] = `Basic ${basic}`;
