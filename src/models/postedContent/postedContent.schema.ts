@@ -24,8 +24,7 @@ export interface IPostedContent {
   };
   is_scheduled: boolean;
   status: "published" | "failed";
-  error_message?: string;
-  createdAt?: Date;
+  error_message?: string;  last_metrics_sync?: Date;  createdAt?: Date;
   updatedAt?: Date;
 }
 
@@ -84,6 +83,7 @@ const postedContentSchema = new Schema<IPostedContent>(
       default: "published",
     },
     error_message: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+    last_metrics_sync: SCHEMA_DEFINITION_PROPERTY.optionalNullDate,
   },
   {
     ...GENERAL_SCHEMA_OPTIONS,
