@@ -9,6 +9,162 @@ import {
 } from "../../../../services/insights/insightsSync.service";
 
 /**
+ * GET /api/v1/insights/weekly-engagement
+ * Returns weekly aggregated engagement metrics per platform.
+ * YouTube → views, Facebook/Instagram/X → likes.
+ * Reads directly from PostedContent.engagement (always available).
+ * Query: ?userId=&weeks=6
+ */
+export const getWeeklyEngagement = async (req: Request, res: Response) => {
+  try {
+    const { userId, weeks = "6" } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "userId is required" });
+    }
+
+    const weeksNum = Math.min(parseInt(weeks as string, 10) || 6, 52);
+    const now = new Date();
+    const since = new Date(now.getTime() - weeksNum * 7 * 24 * 60 * 60 * 1000);
+
+    const getWeekLabel = (weekStartInput: Date) => {
+      const weekStart = new Date(weekStartInput);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      const labelDate = weekEnd > now ? now : weekEnd;
+      return labelDate.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+    };
+
+    // Aggregate directly from PostedContent, grouped by ISO week + platform
+    const pipeline = [
+      {
+        $match: {
+          user_id: new Types.ObjectId(userId as string),
+          status: "published",
+          posted_at: { $gte: since },
+        },
+      },
+      {
+        $addFields: {
+          weekStart: {
+            $dateFromParts: {
+              isoWeekYear: { $isoWeekYear: "$posted_at" },
+              isoWeek: { $isoWeek: "$posted_at" },
+              isoDayOfWeek: 1,
+            },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: { weekStart: "$weekStart", platform: "$platform" },
+          views: { $sum: { $ifNull: ["$engagement.views", 0] } },
+          likes: { $sum: { $ifNull: ["$engagement.likes", 0] } },
+          comments: { $sum: { $ifNull: ["$engagement.comments", 0] } },
+          shares: { $sum: { $ifNull: ["$engagement.shares", 0] } },
+          postCount: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.weekStart",
+          platforms: {
+            $push: {
+              platform: "$_id.platform",
+              views: "$views",
+              likes: "$likes",
+              comments: "$comments",
+              shares: "$shares",
+              postCount: "$postCount",
+            },
+          },
+        },
+      },
+      { $sort: { _id: 1 as const } },
+    ];
+
+    const rawWeeks = await PostedContentModel.aggregate(pipeline);
+
+    // Build week entries: YouTube → views, FB/Insta/X → likes
+    const result = rawWeeks.map((week: any) => {
+      const weekDate = new Date(week._id);
+      const weekLabel = getWeekLabel(weekDate);
+
+      const entry: Record<string, any> = {
+        week: weekLabel,
+        weekStart: week._id,
+        youtube: 0,
+        facebook: 0,
+        instagram: 0,
+        x: 0,
+      };
+
+      week.platforms.forEach((p: any) => {
+        if (p.platform === "youtube") {
+          entry.youtube = p.views || 0;
+        } else if (p.platform in entry) {
+          entry[p.platform] = p.likes || 0;
+        }
+      });
+
+      return entry;
+    });
+
+    // Fill in missing weeks with zeros
+    const allWeeks: any[] = [];
+    for (let i = weeksNum - 1; i >= 0; i--) {
+      const weekStart = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+      // Align to Monday
+      const dayOfWeek = weekStart.getDay();
+      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      weekStart.setDate(weekStart.getDate() + diff);
+      weekStart.setHours(0, 0, 0, 0);
+
+      const weekLabel = getWeekLabel(weekStart);
+
+      const existing = result.find((r: any) => {
+        const rDate = new Date(r.weekStart);
+        return (
+          rDate.getFullYear() === weekStart.getFullYear() &&
+          rDate.getMonth() === weekStart.getMonth() &&
+          rDate.getDate() === weekStart.getDate()
+        );
+      });
+
+      allWeeks.push(
+        existing || {
+          week: weekLabel,
+          weekStart: weekStart.toISOString(),
+          youtube: 0,
+          facebook: 0,
+          instagram: 0,
+          x: 0,
+        }
+      );
+    }
+
+    return res.json({
+      success: true,
+      result: {
+        weeks: allWeeks,
+        meta: {
+          youtube: "views",
+          facebook: "likes",
+          instagram: "likes",
+          x: "likes",
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error("[Insights] Weekly engagement error:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
  * GET /api/v1/insights/content/:postId/history
  * Returns engagement metric snapshots over time for a specific post
  */

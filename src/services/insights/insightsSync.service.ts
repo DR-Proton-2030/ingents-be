@@ -1,5 +1,6 @@
 import { Queue, Worker, Job } from "bullmq";
 import { Redis } from "ioredis";
+import axios from "axios";
 import { REDIS_CONFIG } from "../../config/redis.config";
 import UserModel from "../../models/users/users.model";
 import PostedContentModel from "../../models/postedContent/postedContent.model";
@@ -30,6 +31,10 @@ const getQueue = (): Queue | null => {
         removeOnComplete: true,
         removeOnFail: false,
       },
+    });
+    // Add global error handler to prevent unhandled error event noise
+    insightsQueue.on("error", (err) => {
+      console.error(`[InsightsSync] Queue Error: ${err.message}`);
     });
   }
   return insightsQueue;
@@ -62,6 +67,33 @@ const syncContentMetricsForUser = async (userId: string) => {
 
     // For Facebook posts, we may need a page token
     let accessToken = platformData.access_token;
+
+    if (post.platform === "facebook") {
+      const pageId = post.page_id || platformData.project_id;
+      if (pageId) {
+        try {
+          const pagesRes = await axios.get(
+            "https://graph.facebook.com/v20.0/me/accounts",
+            {
+              params: {
+                fields: "id,access_token",
+                access_token: platformData.access_token,
+              },
+            }
+          );
+
+          const pageData = pagesRes.data?.data?.find((p: any) => p.id === pageId);
+          if (pageData?.access_token) {
+            accessToken = pageData.access_token;
+          }
+        } catch (error: any) {
+          console.warn(
+            `[InsightsSync] Could not resolve Facebook page token for page ${pageId}:`,
+            error.message
+          );
+        }
+      }
+    }
 
     try {
       const metrics = await fetchContentMetrics(
@@ -204,7 +236,17 @@ const processJob = async (job: Job) => {
 export const initializeInsightsWorker = async (): Promise<Worker | null> => {
   try {
     // Test Redis connection
-    const testConn = new Redis({ ...REDIS_CONFIG, lazyConnect: true });
+    const testConn = new Redis({
+      ...REDIS_CONFIG,
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+      retryStrategy: () => null, // Don't retry inside the test
+      enableOfflineQueue: false,
+    });
+
+    // Suppress unhandled error events for the test connection
+    testConn.on("error", () => {});
+
     await testConn.connect();
     await testConn.ping();
     await testConn.quit();
@@ -242,6 +284,11 @@ export const initializeInsightsWorker = async (): Promise<Worker | null> => {
     insightsWorker = new Worker(QUEUE_NAME, processJob, {
       connection: REDIS_CONFIG,
       concurrency: 2, // Limit concurrency to avoid rate limits
+    });
+
+    // Add global error handler to prevent unhandled error event noise
+    insightsWorker.on("error", (err) => {
+      console.error(`[InsightsSync] Worker Error: ${err.message}`);
     });
 
     insightsWorker.on("completed", (job) => {

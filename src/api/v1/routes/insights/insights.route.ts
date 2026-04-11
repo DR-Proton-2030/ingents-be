@@ -3,11 +3,15 @@ import {
   getContentMetricsHistory,
   getAccountInsightsHistory,
   getInsightsSummary,
+  getWeeklyEngagement,
   triggerSync,
   getUserContentWithMetrics,
 } from "../../controller/insights/insights.controller";
 
 const insightsRouter = Router();
+
+// Weekly engagement aggregation (views for YT, likes for FB/Insta/X)
+insightsRouter.get("/weekly-engagement", getWeeklyEngagement);
 
 // Content metrics history for a specific post
 insightsRouter.get("/content/:postId/history", getContentMetricsHistory);

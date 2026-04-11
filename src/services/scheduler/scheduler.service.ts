@@ -27,6 +27,10 @@ const getQueue = (): Queue<SocialMediaJobData> | null => {
         defaultJobOptions: DEFAULT_JOB_OPTIONS,
       }
     );
+    // Add global error handler to prevent unhandled error event noise
+    socialMediaQueue.on("error", (err) => {
+      console.error(`[Scheduler] Queue Error: ${err.message}`);
+    });
   }
   return socialMediaQueue;
 };
@@ -383,6 +387,11 @@ export const initializeWorker = async (): Promise<Worker<SocialMediaJobData> | n
             connection: REDIS_CONFIG,
           });
 
+          // Global error tracker for QueueEvents
+          queueEvents.on("error", (err) => {
+            console.error(`[Scheduler] QueueEvents Error: ${err.message}`);
+          });
+
           const worker = new Worker<SocialMediaJobData>(
             QUEUE_NAMES.SOCIAL_MEDIA_POST,
             async (job) => {
@@ -396,6 +405,10 @@ export const initializeWorker = async (): Promise<Worker<SocialMediaJobData> | n
           );
 
           // Worker event handlers
+          worker.on("error", (err: Error) => {
+            console.error(`[Scheduler] Worker Error: ${err.message}`);
+          });
+
           worker.on("completed", (job: Job<SocialMediaJobData>) => {
             console.log(`Job ${job?.id} completed successfully`);
           });
