@@ -32,7 +32,7 @@ export const instagramAuthCallback = async (req: Request, res: Response) => {
     const userId = state ? atob(state as string) : null;
     // Redirect to frontend with token & pages as query params
     res.redirect(
-      `http://localhost:3000/dashboard/social-media?platform=instagram&token=${tokens.access_token}&user_id=${userId}`
+      `${process.env.FRONTEND_URL}/dashboard/social-media?platform=instagram&token=${tokens.access_token}&user_id=${userId}`
     );
   } catch (error) {
     console.error("OAuth authentication failed:", error);
@@ -59,14 +59,18 @@ export const fetchInstagramProfileController = async (
     console.log(longTokenResponse);
     const longLivedToken = longTokenResponse.access_token;
 
-    const [savedUser, profile] = await Promise.all([
-      UserModel.findByIdAndUpdate(
-        userId,
-        { $set: { "instagram.access_token": longLivedToken } },
-        { new: true }
-      ),
-      getInstagramProfile(longLivedToken),
-    ]);
+    const profile = await getInstagramProfile(longLivedToken);
+    const savedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          "instagram.access_token": longLivedToken,
+          "instagram.project_id": profile?.id || null,
+          "instagram.name": profile?.name || null,
+        },
+      },
+      { new: true }
+    );
     console.log(savedUser);
     res.status(200).json({
       success: true,
@@ -127,6 +131,56 @@ export const publishInstagramPost = async (req: Request, res: Response) => {
     console.error("Failed to publish Instagram post:", error.message);
     res.status(500).json({
       error: "Failed to publish Instagram post",
+    });
+  }
+};
+
+export const disconnectInstagram = async (req: Request, res: Response) => {
+  try {
+    const userId =
+      (req.body?.userId as string) ||
+      (req.body?.user_id as string) ||
+      (req.query?.userId as string) ||
+      (req.query?.user_id as string);
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    const user = await UserModel.findById(userId).exec();
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          "instagram.project_id": null,
+          "instagram.name": null,
+          "instagram.access_token": null,
+        },
+      },
+      { new: true }
+    ).exec();
+
+    return res.status(200).json({
+      success: true,
+      message: "Instagram disconnected successfully",
+      user: updatedUser,
+    });
+  } catch (error: any) {
+    console.error("Error disconnecting Instagram:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to disconnect Instagram",
+      error: error?.message,
     });
   }
 };
