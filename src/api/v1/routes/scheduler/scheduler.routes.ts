@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { upload } from "../../middlewares/helper/multer/multer.middleware";
 import {
   createScheduledPost,
   getUserScheduledPosts,
@@ -15,7 +16,7 @@ import {
 const schedulerRouter = Router();
 
 // Scheduled Posts Routes
-schedulerRouter.post("/schedule", createScheduledPost);
+schedulerRouter.post("/schedule", upload.fields([{ name: "video", maxCount: 1 }, { name: "images", maxCount: 10 }]), createScheduledPost);
 schedulerRouter.post("/schedule/bulk", createBulkScheduledPosts);
 schedulerRouter.get("/scheduled/:userId", getUserScheduledPosts);
 schedulerRouter.get("/scheduled/post/:postId", getScheduledPostById);

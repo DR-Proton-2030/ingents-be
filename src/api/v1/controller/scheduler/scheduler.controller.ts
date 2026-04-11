@@ -10,9 +10,11 @@ import {
 } from "../../../../services/scheduler/scheduler.service";
 import PostedContentModel from "../../../../models/postedContent/postedContent.model";
 import ScheduledPostModel from "../../../../models/scheduledPost/scheduledPost.model";
+import { uploadFileToS3Service } from "../../../../services/uploadFile/uploadFile";
 
 /**
  * Schedule a new social media post
+ * Accepts JSON or multipart/form-data with video/images files
  */
 export const createScheduledPost = async (req: Request, res: Response) => {
   try {
@@ -20,7 +22,6 @@ export const createScheduledPost = async (req: Request, res: Response) => {
       user_id,
       platform,
       content,
-      media_urls,
       media_type,
       hashtags,
       scheduled_at,
@@ -28,6 +29,23 @@ export const createScheduledPost = async (req: Request, res: Response) => {
       channel_id,
       platform_specific_data,
     } = req.body;
+
+    // Parse fields that may come as JSON strings from FormData
+    let parsedHashtags = hashtags;
+    if (typeof hashtags === "string") {
+      try { parsedHashtags = JSON.parse(hashtags); } catch { parsedHashtags = hashtags.split(",").filter(Boolean); }
+    }
+
+    let parsedPlatformSpecificData = platform_specific_data;
+    if (typeof platform_specific_data === "string") {
+      try { parsedPlatformSpecificData = JSON.parse(platform_specific_data); } catch { parsedPlatformSpecificData = {}; }
+    }
+
+    // Get media_urls from body (may be JSON string from FormData)
+    let media_urls: string[] = req.body.media_urls || [];
+    if (typeof media_urls === "string") {
+      try { media_urls = JSON.parse(media_urls) as string[]; } catch { media_urls = [media_urls as unknown as string]; }
+    }
 
     // Validation
     if (!user_id || !platform || !content || !scheduled_at) {
@@ -63,6 +81,37 @@ export const createScheduledPost = async (req: Request, res: Response) => {
       });
     }
 
+    // Handle uploaded files → S3
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+
+    if (files?.video?.length) {
+      const videoFile = files.video[0];
+      const s3Url = await uploadFileToS3Service(
+        `scheduled-posts/${user_id}/videos`,
+        videoFile.buffer,
+        videoFile.mimetype || "video/mp4"
+      );
+      if (!s3Url) {
+        return res.status(500).json({ success: false, message: "Failed to upload video to storage" });
+      }
+      media_urls = [s3Url];
+    }
+
+    if (files?.images?.length) {
+      const uploadedUrls: string[] = [];
+      for (const imgFile of files.images) {
+        const s3Url = await uploadFileToS3Service(
+          `scheduled-posts/${user_id}/images`,
+          imgFile.buffer,
+          imgFile.mimetype || "image/jpeg"
+        );
+        if (s3Url) uploadedUrls.push(s3Url);
+      }
+      if (uploadedUrls.length > 0) {
+        media_urls = [...media_urls, ...uploadedUrls];
+      }
+    }
+
     if (platform === "instagram" && (!media_urls || media_urls.length === 0)) {
       return res.status(400).json({
         success: false,
@@ -83,11 +132,11 @@ export const createScheduledPost = async (req: Request, res: Response) => {
       content,
       media_urls: media_urls || [],
       media_type: media_type || "text",
-      hashtags: hashtags || [],
+      hashtags: parsedHashtags || [],
       scheduled_at: scheduledDate,
       page_id,
       channel_id,
-      platform_specific_data: platform_specific_data || {},
+      platform_specific_data: parsedPlatformSpecificData || {},
     });
 
     return res.status(201).json({
