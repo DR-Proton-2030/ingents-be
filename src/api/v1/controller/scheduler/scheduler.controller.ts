@@ -12,6 +12,7 @@ import PostedContentModel from "../../../../models/postedContent/postedContent.m
 import ScheduledPostModel from "../../../../models/scheduledPost/scheduledPost.model";
 import { uploadFileToS3Service } from "../../../../services/uploadFile/uploadFile";
 import { refreshEngagementForPosts } from "../../../../services/insights/engagementRefresh";
+import { logActivity } from "../../../../services/activityLog/activityLog.service";
 
 /**
  * Schedule a new social media post
@@ -138,6 +139,15 @@ export const createScheduledPost = async (req: Request, res: Response) => {
       page_id,
       channel_id,
       platform_specific_data: parsedPlatformSpecificData || {},
+    });
+
+    logActivity({
+      company_object_id: req.user?.company_object_id?.toString(),
+      actor_object_id: req.user?._id?.toString() || user_id,
+      actor_name: req.user?.full_name || "Unknown",
+      activity_type: "POST_SCHEDULED",
+      message: `scheduled a ${platform} post`,
+      metadata: { post_id: scheduledPost?._id, platform },
     });
 
     return res.status(201).json({

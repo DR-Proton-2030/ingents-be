@@ -304,6 +304,7 @@ const postFacebookUniversal = (req, res) => __awaiter(void 0, void 0, void 0, fu
             }
             const imgRes = yield axios_1.default.post(`${FACEBOOK_GRAPH_URL}/${id}/photos`, imgPayload);
             // Save to history if not scheduled
+            // Use post_id (pageId_postId format) from photos endpoint for correct metrics fetching
             if (!scheduledPublishTime) {
                 yield postedContent_model_1.default.create({
                     user_id: userId,
@@ -312,7 +313,7 @@ const postFacebookUniversal = (req, res) => __awaiter(void 0, void 0, void 0, fu
                     media_urls: [finalImageUrl],
                     media_type: "image",
                     posted_at: new Date(),
-                    platform_post_id: imgRes.data.id,
+                    platform_post_id: imgRes.data.post_id || imgRes.data.id,
                     is_scheduled: false,
                     status: "published",
                     page_id: pageId,
@@ -390,6 +391,7 @@ const postFacebookUniversal = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 headers: { Authorization: `Bearer ${pageAccessToken}` },
             });
             // Save to history if not scheduled
+            // Construct proper post ID (pageId_videoId) for correct metrics fetching
             if (!scheduledPublishTime) {
                 yield postedContent_model_1.default.create({
                     user_id: userId,
@@ -398,7 +400,7 @@ const postFacebookUniversal = (req, res) => __awaiter(void 0, void 0, void 0, fu
                     media_urls: [finalVideoUrl],
                     media_type: "video",
                     posted_at: new Date(),
-                    platform_post_id: resp.data.id,
+                    platform_post_id: `${pageId}_${resp.data.id}`,
                     is_scheduled: false,
                     status: "published",
                     page_id: pageId,

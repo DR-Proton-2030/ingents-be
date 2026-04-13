@@ -88,7 +88,8 @@ const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         const tokenPayload = {
             _id: userInstance._id.toString(),
             role,
-            company_object_id: company_object_id.toString()
+            company_object_id: company_object_id.toString(),
+            full_name: userInstance.full_name,
         };
         const token = (0, generateToken_service_1.default)(tokenPayload);
         const resetUrl = `${config_1.FRONTEND_URL}/setup-password?token=${token}`;

@@ -94,6 +94,7 @@ export const signUp = async (req: Request, res: Response) => {
       company_object_id: String(companyInstance._id),
       _id: String(userInstance._id),
       role: "user",
+      full_name: user_details.full_name,
     };
     const token: string = generateToken(tokenPayload);
 
@@ -162,6 +163,7 @@ export const signIn = async (req: Request, res: Response) => {
       company_object_id: String(user.company_object_id),
       _id: String(user._id),
       role: user.role || "user",
+      full_name: user.full_name,
     };
 
     const token: string = generateToken(tokenPayload);

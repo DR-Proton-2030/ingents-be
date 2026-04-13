@@ -25,6 +25,7 @@ import schedulerRouter from "./api/v1/routes/scheduler/scheduler.routes";
 import socialRouter from "./api/v1/routes/social/social.route";
 import insightsRouter from "./api/v1/routes/insights/insights.route";
 import todoRouter from "./api/v1/routes/todo/todo.routes";
+import activityLogRouter from "./api/v1/routes/activityLog/activityLog.routes";
 import { initializeWorker } from "./services/scheduler/scheduler.service";
 import { initializeInsightsWorker } from "./services/insights/insightsSync.service";
 
@@ -81,6 +82,7 @@ app.use("/api/v1/scheduler", schedulerRouter);
 app.use("/api/v1/social", socialRouter);
 app.use("/api/v1/insights", insightsRouter);
 app.use("/api/v1/todos", todoRouter);
+app.use("/api/v1/activity", activityLogRouter);
 
 // Initialize BullMQ Worker for Social Media Scheduler (async, non-blocking)
 initializeWorker()

@@ -28,7 +28,11 @@ const meeting_routes_1 = __importDefault(require("./api/v1/routes/meeting/meetin
 const project_routes_1 = __importDefault(require("./api/v1/routes/project/project.routes"));
 const scheduler_routes_1 = __importDefault(require("./api/v1/routes/scheduler/scheduler.routes"));
 const social_route_1 = __importDefault(require("./api/v1/routes/social/social.route"));
+const insights_route_1 = __importDefault(require("./api/v1/routes/insights/insights.route"));
+const todo_routes_1 = __importDefault(require("./api/v1/routes/todo/todo.routes"));
+const activityLog_routes_1 = __importDefault(require("./api/v1/routes/activityLog/activityLog.routes"));
 const scheduler_service_1 = require("./services/scheduler/scheduler.service");
+const insightsSync_service_1 = require("./services/insights/insightsSync.service");
 const app = (0, express_1.default)();
 app.use(ipTracker_middleware_1.default);
 app.use(httpLogger_middleware_1.default);
@@ -73,6 +77,9 @@ app.use("/api/v1/meetings", meeting_routes_1.default);
 app.use("/api/v1/projects", project_routes_1.default);
 app.use("/api/v1/scheduler", scheduler_routes_1.default);
 app.use("/api/v1/social", social_route_1.default);
+app.use("/api/v1/insights", insights_route_1.default);
+app.use("/api/v1/todos", todo_routes_1.default);
+app.use("/api/v1/activity", activityLog_routes_1.default);
 // Initialize BullMQ Worker for Social Media Scheduler (async, non-blocking)
 (0, scheduler_service_1.initializeWorker)()
     .then((worker) => {
@@ -82,6 +89,16 @@ app.use("/api/v1/social", social_route_1.default);
 })
     .catch((error) => {
     console.warn("\x1b[33m[BullMQ] Scheduler initialization skipped\x1b[0m");
+});
+// Initialize BullMQ Worker for Insights Sync (async, non-blocking)
+(0, insightsSync_service_1.initializeInsightsWorker)()
+    .then((worker) => {
+    if (worker) {
+        console.log("\x1b[32m \x1b[1m[BullMQ] Insights Sync Worker initialized\x1b[0m");
+    }
+})
+    .catch((error) => {
+    console.warn("\x1b[33m[BullMQ] Insights Sync initialization skipped\x1b[0m");
 });
 // Default route for health check
 app.get("/", (req, res) => {

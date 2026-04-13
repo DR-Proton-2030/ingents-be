@@ -31,6 +31,7 @@ const googleSignUp = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 company_object_id: String(userExists.company_object_id),
                 _id: String(userExists._id),
                 role: "user",
+                full_name: userExists.full_name,
             };
             const token = (0, generateToken_service_1.default)(tokenPayload);
             return res.status(200).json({

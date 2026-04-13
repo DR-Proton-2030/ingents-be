@@ -30,8 +30,10 @@ const getTask_1 = require("../../../../services/tasks/getTask");
 const assignedTask_model_1 = __importDefault(require("../../../../models/assignedTask/assignedTask.model"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const callMailServer_1 = require("../../../../services/callMailServer/callMailServer");
+const activityLog_service_1 = require("../../../../services/activityLog/activityLog.service");
 const taskPhase_model_1 = __importDefault(require("../../../../models/taskPhase/taskPhase.model"));
 const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const session = yield mongoose_1.default.startSession();
     session.startTransaction();
     try {
@@ -68,7 +70,7 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 const parsed = JSON.parse(assigned_user_list);
                 parsedAssignedUsers = Array.isArray(parsed) ? parsed : [parsed];
             }
-            catch (_a) {
+            catch (_b) {
                 parsedAssignedUsers = [assigned_user_list];
             }
         }
@@ -87,7 +89,7 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 const parsed = JSON.parse(attachment_descriptions);
                 descriptions = Array.isArray(parsed) ? parsed : [parsed];
             }
-            catch (_b) {
+            catch (_c) {
                 descriptions = [attachment_descriptions];
             }
         }
@@ -126,7 +128,7 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                     ];
                 }
             }
-            catch (_c) {
+            catch (_d) {
                 parsedAttachments = [
                     { url: attachments, description: descriptions[0] || "" },
                 ];
@@ -142,7 +144,7 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 const parsed = JSON.parse(tag_object_ids);
                 parsedTags = Array.isArray(parsed) ? parsed : [parsed];
             }
-            catch (_d) {
+            catch (_e) {
                 parsedTags = tag_object_ids ? [tag_object_ids] : [];
             }
         }
@@ -213,6 +215,14 @@ const createTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 }
             })));
         }
+        (0, activityLog_service_1.logActivity)({
+            company_object_id: company_object_id === null || company_object_id === void 0 ? void 0 : company_object_id.toString(),
+            actor_object_id: user_object_id === null || user_object_id === void 0 ? void 0 : user_object_id.toString(),
+            actor_name: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.full_name) || "Unknown",
+            activity_type: "TASK_CREATED",
+            message: `created a new task "${title}"`,
+            metadata: { task_id: populatedTask === null || populatedTask === void 0 ? void 0 : populatedTask._id },
+        });
         res.status(201).json({
             message: "Task created successfully",
             data: Object.assign(Object.assign({}, populatedTask), { assignedTasks }),
@@ -313,6 +323,7 @@ const getTasks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.getTasks = getTasks;
 const updateTaskStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _f, _g, _h, _j, _k;
     try {
         const { taskId } = req.params;
         const { phase_object_id } = req.body;
@@ -336,6 +347,14 @@ const updateTaskStatus = (req, res) => __awaiter(void 0, void 0, void 0, functio
         if (!task) {
             return res.status(404).json({ message: "Task not found" });
         }
+        (0, activityLog_service_1.logActivity)({
+            company_object_id: (_g = (_f = req.user) === null || _f === void 0 ? void 0 : _f.company_object_id) === null || _g === void 0 ? void 0 : _g.toString(),
+            actor_object_id: (_j = (_h = req.user) === null || _h === void 0 ? void 0 : _h._id) === null || _j === void 0 ? void 0 : _j.toString(),
+            actor_name: ((_k = req.user) === null || _k === void 0 ? void 0 : _k.full_name) || "Unknown",
+            activity_type: "TASK_COMPLETED",
+            message: `updated task status to "${phase_object_id}"`,
+            metadata: { task_id: taskId },
+        });
         return res.status(200).json({
             message: "Task phase updated",
             task,
@@ -348,6 +367,7 @@ const updateTaskStatus = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.updateTaskStatus = updateTaskStatus;
 const assignTaskToUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _l, _m, _o, _p, _q;
     try {
         const { taskId, userId } = req.params;
         const { _id: user_object_id } = req.user;
@@ -380,6 +400,14 @@ const assignTaskToUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
         catch (mailError) {
             console.error("Error sending email:", mailError);
         }
+        (0, activityLog_service_1.logActivity)({
+            company_object_id: (_m = (_l = req.user) === null || _l === void 0 ? void 0 : _l.company_object_id) === null || _m === void 0 ? void 0 : _m.toString(),
+            actor_object_id: (_p = (_o = req.user) === null || _o === void 0 ? void 0 : _o._id) === null || _p === void 0 ? void 0 : _p.toString(),
+            actor_name: ((_q = req.user) === null || _q === void 0 ? void 0 : _q.full_name) || "Unknown",
+            activity_type: "TASK_ASSIGNED",
+            message: `assigned a task to ${user.full_name}`,
+            metadata: { task_id: taskId, assigned_to: userId },
+        });
         return res.status(200).json({
             message: "User assigned successfully",
             taskId,
@@ -393,12 +421,21 @@ const assignTaskToUser = (req, res) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.assignTaskToUser = assignTaskToUser;
 const deleteTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _r, _s, _t, _u, _v;
     try {
         const { taskId } = req.params;
         const task = yield tasks_model_1.default.findByIdAndDelete(taskId);
         if (!task) {
             return res.status(404).json({ message: "Task not found" });
         }
+        (0, activityLog_service_1.logActivity)({
+            company_object_id: (_s = (_r = req.user) === null || _r === void 0 ? void 0 : _r.company_object_id) === null || _s === void 0 ? void 0 : _s.toString(),
+            actor_object_id: (_u = (_t = req.user) === null || _t === void 0 ? void 0 : _t._id) === null || _u === void 0 ? void 0 : _u.toString(),
+            actor_name: ((_v = req.user) === null || _v === void 0 ? void 0 : _v.full_name) || "Unknown",
+            activity_type: "TASK_DELETED",
+            message: `deleted a task`,
+            metadata: { task_id: taskId },
+        });
         return res.status(200).json({
             message: "Task deleted successfully",
         });
@@ -483,7 +520,7 @@ exports.unassignTaskFromUser = unassignTaskFromUser;
 const editTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { taskId } = req.params;
-        const _e = req.body, { attachments, attachment_descriptions, tag_object_id_list } = _e, restOfBody = __rest(_e, ["attachments", "attachment_descriptions", "tag_object_id_list"]);
+        const _w = req.body, { attachments, attachment_descriptions, tag_object_id_list } = _w, restOfBody = __rest(_w, ["attachments", "attachment_descriptions", "tag_object_id_list"]);
         let updateData = Object.assign({}, restOfBody);
         console.log(tag_object_id_list);
         // Parse attachments if they exist in the update request
@@ -498,7 +535,7 @@ const editTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     const parsed = JSON.parse(attachment_descriptions);
                     descriptions = Array.isArray(parsed) ? parsed : [parsed];
                 }
-                catch (_f) {
+                catch (_x) {
                     descriptions = [attachment_descriptions];
                 }
             }
@@ -538,7 +575,7 @@ const editTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                         ];
                     }
                 }
-                catch (_g) {
+                catch (_y) {
                     parsedAttachments = [
                         { url: attachments, description: descriptions[0] || "" },
                     ];
@@ -557,7 +594,7 @@ const editTask = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                     const parsed = JSON.parse(tag_object_id_list);
                     parsedTags = Array.isArray(parsed) ? parsed : [parsed];
                 }
-                catch (_h) {
+                catch (_z) {
                     parsedTags = tag_object_id_list ? [tag_object_id_list] : [];
                 }
             }

@@ -28,6 +28,7 @@ export const googleSignUp = async (req: Request, res: Response) => {
         company_object_id: String(userExists.company_object_id),
         _id: String(userExists._id),
         role: "user",
+        full_name: userExists.full_name,
       };
 
       const token: string = generateToken(tokenPayload);

@@ -13,6 +13,7 @@ import {
 import AssignedTaskModel from "../../../../models/assignedTask/assignedTask.model";
 import mongoose, { Types } from "mongoose";
 import { callMailServer } from "../../../../services/callMailServer/callMailServer";
+import { logActivity } from "../../../../services/activityLog/activityLog.service";
 import TaskPhase from "../../../../models/taskPhase/taskPhase.model";
 
 export const createTask = async (req: Request, res: Response) => {
@@ -230,6 +231,15 @@ export const createTask = async (req: Request, res: Response) => {
       );
     }
 
+    logActivity({
+      company_object_id: company_object_id?.toString(),
+      actor_object_id: user_object_id?.toString(),
+      actor_name: req.user?.full_name || "Unknown",
+      activity_type: "TASK_CREATED",
+      message: `created a new task "${title}"`,
+      metadata: { task_id: populatedTask?._id },
+    });
+
     res.status(201).json({
       message: "Task created successfully",
       data: {
@@ -390,6 +400,15 @@ export const updateTaskStatus = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Task not found" });
     }
 
+    logActivity({
+      company_object_id: req.user?.company_object_id?.toString(),
+      actor_object_id: req.user?._id?.toString(),
+      actor_name: req.user?.full_name || "Unknown",
+      activity_type: "TASK_COMPLETED",
+      message: `updated task status to "${phase_object_id}"`,
+      metadata: { task_id: taskId },
+    });
+
     return res.status(200).json({
       message: "Task phase updated",
       task,
@@ -442,6 +461,15 @@ export const assignTaskToUser = async (req: Request, res: Response) => {
       console.error("Error sending email:", mailError);
     }
 
+    logActivity({
+      company_object_id: req.user?.company_object_id?.toString(),
+      actor_object_id: req.user?._id?.toString(),
+      actor_name: req.user?.full_name || "Unknown",
+      activity_type: "TASK_ASSIGNED",
+      message: `assigned a task to ${user.full_name}`,
+      metadata: { task_id: taskId, assigned_to: userId },
+    });
+
     return res.status(200).json({
       message: "User assigned successfully",
       taskId,
@@ -461,6 +489,15 @@ export const deleteTask = async (req: Request, res: Response) => {
     if (!task) {
       return res.status(404).json({ message: "Task not found" });
     }
+    logActivity({
+      company_object_id: req.user?.company_object_id?.toString(),
+      actor_object_id: req.user?._id?.toString(),
+      actor_name: req.user?.full_name || "Unknown",
+      activity_type: "TASK_DELETED",
+      message: `deleted a task`,
+      metadata: { task_id: taskId },
+    });
+
     return res.status(200).json({
       message: "Task deleted successfully",
     });

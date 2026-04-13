@@ -17,6 +17,7 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const crypto_1 = __importDefault(require("crypto"));
 const scheduledMeeting_model_1 = __importDefault(require("../../../../models/scheduledMeeting/scheduledMeeting.model"));
 const meetingParticipant_model_1 = __importDefault(require("../../../../models/meetingParticipant/meetingParticipant.model"));
+const activityLog_service_1 = require("../../../../services/activityLog/activityLog.service");
 /**
  * Generate recurring meeting instances based on recurrence rule
  */
@@ -74,6 +75,7 @@ const generateRecurringInstances = (parentMeeting, recurrenceRule, maxInstances 
  * POST /api/v1/meetings/create
  */
 const createMeeting = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const session = yield mongoose_1.default.startSession();
     session.startTransaction();
     try {
@@ -150,6 +152,14 @@ const createMeeting = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         const meetingParticipants = yield meetingParticipant_model_1.default.find({ meeting_object_id: newMeeting._id })
             .populate("user_details", "full_name email")
             .lean();
+        (0, activityLog_service_1.logActivity)({
+            company_object_id: company_object_id === null || company_object_id === void 0 ? void 0 : company_object_id.toString(),
+            actor_object_id: user_object_id === null || user_object_id === void 0 ? void 0 : user_object_id.toString(),
+            actor_name: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.full_name) || "Unknown",
+            activity_type: "MEETING_CREATED",
+            message: `created a meeting "${title}"`,
+            metadata: { meeting_id: newMeeting._id },
+        });
         res.status(201).json({
             message: "Meeting created successfully",
             data: {

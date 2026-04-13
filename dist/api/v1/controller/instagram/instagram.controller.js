@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.publishInstagramPost = exports.fetchInstagramProfileController = exports.instagramAuthCallback = exports.instagrmaLogin = void 0;
+exports.disconnectInstagram = exports.publishInstagramPost = exports.fetchInstagramProfileController = exports.instagramAuthCallback = exports.instagrmaLogin = void 0;
 const instagram_service_1 = require("../../../../services/instagram/instagram.service");
 const users_model_1 = __importDefault(require("../../../../models/users/users.model"));
 const postedContent_model_1 = __importDefault(require("../../../../models/postedContent/postedContent.model"));
@@ -36,7 +36,7 @@ const instagramAuthCallback = (req, res) => __awaiter(void 0, void 0, void 0, fu
         console.log("====>state : ", state);
         const userId = state ? atob(state) : null;
         // Redirect to frontend with token & pages as query params
-        res.redirect(`http://localhost:3000/dashboard/social-media?platform=instagram&token=${tokens.access_token}&user_id=${userId}`);
+        res.redirect(`${process.env.FRONTEND_URL}/dashboard/social-media?platform=instagram&token=${tokens.access_token}&user_id=${userId}`);
     }
     catch (error) {
         console.error("OAuth authentication failed:", error);
@@ -56,10 +56,14 @@ const fetchInstagramProfileController = (req, res) => __awaiter(void 0, void 0, 
         const longTokenResponse = yield (0, instagram_service_1.getInstagramLongLivedToken)(access_token);
         console.log(longTokenResponse);
         const longLivedToken = longTokenResponse.access_token;
-        const [savedUser, profile] = yield Promise.all([
-            users_model_1.default.findByIdAndUpdate(userId, { $set: { "instagram.access_token": longLivedToken } }, { new: true }),
-            (0, instagram_service_1.getInstagramProfile)(longLivedToken),
-        ]);
+        const profile = yield (0, instagram_service_1.getInstagramProfile)(longLivedToken);
+        const savedUser = yield users_model_1.default.findByIdAndUpdate(userId, {
+            $set: {
+                "instagram.access_token": longLivedToken,
+                "instagram.project_id": (profile === null || profile === void 0 ? void 0 : profile.id) || null,
+                "instagram.name": (profile === null || profile === void 0 ? void 0 : profile.name) || null,
+            },
+        }, { new: true });
         console.log(savedUser);
         res.status(200).json({
             success: true,
@@ -121,3 +125,46 @@ const publishInstagramPost = (req, res) => __awaiter(void 0, void 0, void 0, fun
     }
 });
 exports.publishInstagramPost = publishInstagramPost;
+const disconnectInstagram = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c, _d;
+    try {
+        const userId = ((_a = req.body) === null || _a === void 0 ? void 0 : _a.userId) ||
+            ((_b = req.body) === null || _b === void 0 ? void 0 : _b.user_id) ||
+            ((_c = req.query) === null || _c === void 0 ? void 0 : _c.userId) ||
+            ((_d = req.query) === null || _d === void 0 ? void 0 : _d.user_id);
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                message: "userId is required",
+            });
+        }
+        const user = yield users_model_1.default.findById(userId).exec();
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
+            });
+        }
+        const updatedUser = yield users_model_1.default.findByIdAndUpdate(userId, {
+            $set: {
+                "instagram.project_id": null,
+                "instagram.name": null,
+                "instagram.access_token": null,
+            },
+        }, { new: true }).exec();
+        return res.status(200).json({
+            success: true,
+            message: "Instagram disconnected successfully",
+            user: updatedUser,
+        });
+    }
+    catch (error) {
+        console.error("Error disconnecting Instagram:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to disconnect Instagram",
+            error: error === null || error === void 0 ? void 0 : error.message,
+        });
+    }
+});
+exports.disconnectInstagram = disconnectInstagram;

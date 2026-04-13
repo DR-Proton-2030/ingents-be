@@ -82,6 +82,7 @@ const signUp = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             company_object_id: String(companyInstance._id),
             _id: String(userInstance._id),
             role: "user",
+            full_name: user_details.full_name,
         };
         const token = (0, generateToken_service_1.default)(tokenPayload);
         res.cookie("token", token, {
@@ -138,6 +139,7 @@ const signIn = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             company_object_id: String(user.company_object_id),
             _id: String(user._id),
             role: user.role || "user",
+            full_name: user.full_name,
         };
         const token = (0, generateToken_service_1.default)(tokenPayload);
         // 4️⃣ Sanitize user object

@@ -10,4 +10,5 @@ instagramRouter.get("/login-instagram", instagram_controller_1.instagrmaLogin);
 instagramRouter.get("/callback", instagram_controller_1.instagramAuthCallback);
 instagramRouter.get("/fetch-profile", instagram_controller_1.fetchInstagramProfileController);
 instagramRouter.post("/publish-post", instagram_controller_1.publishInstagramPost);
+instagramRouter.post("/disconnect", instagram_controller_1.disconnectInstagram);
 exports.default = instagramRouter;

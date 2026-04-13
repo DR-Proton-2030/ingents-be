@@ -17,12 +17,46 @@ const mongoose_1 = require("mongoose");
 const scheduler_service_1 = require("../../../../services/scheduler/scheduler.service");
 const postedContent_model_1 = __importDefault(require("../../../../models/postedContent/postedContent.model"));
 const scheduledPost_model_1 = __importDefault(require("../../../../models/scheduledPost/scheduledPost.model"));
+const uploadFile_1 = require("../../../../services/uploadFile/uploadFile");
+const engagementRefresh_1 = require("../../../../services/insights/engagementRefresh");
+const activityLog_service_1 = require("../../../../services/activityLog/activityLog.service");
 /**
  * Schedule a new social media post
+ * Accepts JSON or multipart/form-data with video/images files
  */
 const createScheduledPost = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c, _d, _e, _f, _g;
     try {
-        const { user_id, platform, content, media_urls, media_type, hashtags, scheduled_at, page_id, channel_id, platform_specific_data, } = req.body;
+        const { user_id, platform, content, media_type, hashtags, scheduled_at, page_id, channel_id, platform_specific_data, } = req.body;
+        // Parse fields that may come as JSON strings from FormData
+        let parsedHashtags = hashtags;
+        if (typeof hashtags === "string") {
+            try {
+                parsedHashtags = JSON.parse(hashtags);
+            }
+            catch (_h) {
+                parsedHashtags = hashtags.split(",").filter(Boolean);
+            }
+        }
+        let parsedPlatformSpecificData = platform_specific_data;
+        if (typeof platform_specific_data === "string") {
+            try {
+                parsedPlatformSpecificData = JSON.parse(platform_specific_data);
+            }
+            catch (_j) {
+                parsedPlatformSpecificData = {};
+            }
+        }
+        // Get media_urls from body (may be JSON string from FormData)
+        let media_urls = req.body.media_urls || [];
+        if (typeof media_urls === "string") {
+            try {
+                media_urls = JSON.parse(media_urls);
+            }
+            catch (_k) {
+                media_urls = [media_urls];
+            }
+        }
         // Validation
         if (!user_id || !platform || !content || !scheduled_at) {
             return res.status(400).json({
@@ -53,6 +87,27 @@ const createScheduledPost = (req, res) => __awaiter(void 0, void 0, void 0, func
                 message: "page_id is required for Facebook posts",
             });
         }
+        // Handle uploaded files → S3
+        const files = req.files;
+        if ((_a = files === null || files === void 0 ? void 0 : files.video) === null || _a === void 0 ? void 0 : _a.length) {
+            const videoFile = files.video[0];
+            const s3Url = yield (0, uploadFile_1.uploadFileToS3Service)(`scheduled-posts/${user_id}/videos`, videoFile.buffer, videoFile.mimetype || "video/mp4");
+            if (!s3Url) {
+                return res.status(500).json({ success: false, message: "Failed to upload video to storage" });
+            }
+            media_urls = [s3Url];
+        }
+        if ((_b = files === null || files === void 0 ? void 0 : files.images) === null || _b === void 0 ? void 0 : _b.length) {
+            const uploadedUrls = [];
+            for (const imgFile of files.images) {
+                const s3Url = yield (0, uploadFile_1.uploadFileToS3Service)(`scheduled-posts/${user_id}/images`, imgFile.buffer, imgFile.mimetype || "image/jpeg");
+                if (s3Url)
+                    uploadedUrls.push(s3Url);
+            }
+            if (uploadedUrls.length > 0) {
+                media_urls = [...media_urls, ...uploadedUrls];
+            }
+        }
         if (platform === "instagram" && (!media_urls || media_urls.length === 0)) {
             return res.status(400).json({
                 success: false,
@@ -71,11 +126,19 @@ const createScheduledPost = (req, res) => __awaiter(void 0, void 0, void 0, func
             content,
             media_urls: media_urls || [],
             media_type: media_type || "text",
-            hashtags: hashtags || [],
+            hashtags: parsedHashtags || [],
             scheduled_at: scheduledDate,
             page_id,
             channel_id,
-            platform_specific_data: platform_specific_data || {},
+            platform_specific_data: parsedPlatformSpecificData || {},
+        });
+        (0, activityLog_service_1.logActivity)({
+            company_object_id: (_d = (_c = req.user) === null || _c === void 0 ? void 0 : _c.company_object_id) === null || _d === void 0 ? void 0 : _d.toString(),
+            actor_object_id: ((_f = (_e = req.user) === null || _e === void 0 ? void 0 : _e._id) === null || _f === void 0 ? void 0 : _f.toString()) || user_id,
+            actor_name: ((_g = req.user) === null || _g === void 0 ? void 0 : _g.full_name) || "Unknown",
+            activity_type: "POST_SCHEDULED",
+            message: `scheduled a ${platform} post`,
+            metadata: { post_id: scheduledPost === null || scheduledPost === void 0 ? void 0 : scheduledPost._id, platform },
         });
         return res.status(201).json({
             success: true,
@@ -287,6 +350,10 @@ const getUserPostedContent = (req, res) => __awaiter(void 0, void 0, void 0, fun
             });
         }
         const postedContent = yield (0, scheduler_service_1.getPostedContent)(userId, platform, limit ? parseInt(limit, 10) : undefined);
+        // Refresh engagement metrics in the background for posts that haven't been synced recently
+        (0, engagementRefresh_1.refreshEngagementForPosts)(userId, postedContent).catch((err) => {
+            console.error("[PostedContent] Background engagement refresh failed:", err.message);
+        });
         return res.status(200).json({
             success: true,
             data: postedContent,

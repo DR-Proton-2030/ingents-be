@@ -57,6 +57,7 @@ const postedContentSchema = new mongoose_1.Schema({
         default: "published",
     },
     error_message: model_constant_1.default.optionalNullString,
+    last_metrics_sync: model_constant_1.default.optionalNullDate,
 }, Object.assign(Object.assign({}, schemaOption_1.GENERAL_SCHEMA_OPTIONS), { toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 // Index for efficient querying
 postedContentSchema.index({ user_id: 1, platform: 1 });

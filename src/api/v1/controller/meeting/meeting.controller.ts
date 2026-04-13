@@ -5,6 +5,7 @@ import ScheduledMeetingModel from "../../../../models/scheduledMeeting/scheduled
 import MeetingParticipantModel from "../../../../models/meetingParticipant/meetingParticipant.model";
 import { IScheduledMeeting, MeetingStatus, MeetingType } from "../../../../types/interface/scheduledMeeting.interface";
 import { ParticipantResponseStatus } from "../../../../types/interface/meetingParticipant.interface";
+import { logActivity } from "../../../../services/activityLog/activityLog.service";
 
 /**
  * Generate recurring meeting instances based on recurrence rule
@@ -174,6 +175,15 @@ export const createMeeting = async (req: Request, res: Response) => {
         const meetingParticipants = await MeetingParticipantModel.find({ meeting_object_id: newMeeting._id })
             .populate("user_details", "full_name email")
             .lean();
+
+        logActivity({
+            company_object_id: company_object_id?.toString(),
+            actor_object_id: user_object_id?.toString(),
+            actor_name: req.user?.full_name || "Unknown",
+            activity_type: "MEETING_CREATED",
+            message: `created a meeting "${title}"`,
+            metadata: { meeting_id: newMeeting._id },
+        });
 
         res.status(201).json({
             message: "Meeting created successfully",

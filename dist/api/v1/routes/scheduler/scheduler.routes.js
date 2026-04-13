@@ -1,10 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const multer_middleware_1 = require("../../middlewares/helper/multer/multer.middleware");
 const scheduler_controller_1 = require("../../controller/scheduler/scheduler.controller");
 const schedulerRouter = (0, express_1.Router)();
 // Scheduled Posts Routes
-schedulerRouter.post("/schedule", scheduler_controller_1.createScheduledPost);
+schedulerRouter.post("/schedule", multer_middleware_1.upload.fields([{ name: "video", maxCount: 1 }, { name: "images", maxCount: 10 }]), scheduler_controller_1.createScheduledPost);
 schedulerRouter.post("/schedule/bulk", scheduler_controller_1.createBulkScheduledPosts);
 schedulerRouter.get("/scheduled/:userId", scheduler_controller_1.getUserScheduledPosts);
 schedulerRouter.get("/scheduled/post/:postId", scheduler_controller_1.getScheduledPostById);

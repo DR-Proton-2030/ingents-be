@@ -84,7 +84,8 @@ export const createUser = async (req: Request, res: Response) => {
     const tokenPayload : ItokenPayload = {
       _id: userInstance._id.toString(),
       role,
-      company_object_id: company_object_id.toString()
+      company_object_id: company_object_id.toString(),
+      full_name: userInstance.full_name,
     }
 
     const token = generateToken(tokenPayload);

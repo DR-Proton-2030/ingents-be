@@ -36,6 +36,10 @@ const getQueue = () => {
             connection: redis_config_1.REDIS_CONFIG,
             defaultJobOptions: redis_config_1.DEFAULT_JOB_OPTIONS,
         });
+        // Add global error handler to prevent unhandled error event noise
+        socialMediaQueue.on("error", (err) => {
+            console.error(`[Scheduler] Queue Error: ${err.message}`);
+        });
     }
     return socialMediaQueue;
 };
@@ -318,6 +322,10 @@ const initializeWorker = () => __awaiter(void 0, void 0, void 0, function* () {
                 queueEvents = new bullmq_1.QueueEvents(redis_config_1.QUEUE_NAMES.SOCIAL_MEDIA_POST, {
                     connection: redis_config_1.REDIS_CONFIG,
                 });
+                // Global error tracker for QueueEvents
+                queueEvents.on("error", (err) => {
+                    console.error(`[Scheduler] QueueEvents Error: ${err.message}`);
+                });
                 const worker = new bullmq_1.Worker(redis_config_1.QUEUE_NAMES.SOCIAL_MEDIA_POST, (job) => __awaiter(void 0, void 0, void 0, function* () {
                     console.log(`Processing job ${job.id} for platform ${job.data.platform}`);
                     return (0, exports.processPostJob)(job);
@@ -326,6 +334,9 @@ const initializeWorker = () => __awaiter(void 0, void 0, void 0, function* () {
                     concurrency: 5,
                 });
                 // Worker event handlers
+                worker.on("error", (err) => {
+                    console.error(`[Scheduler] Worker Error: ${err.message}`);
+                });
                 worker.on("completed", (job) => {
                     console.log(`Job ${job === null || job === void 0 ? void 0 : job.id} completed successfully`);
                 });
