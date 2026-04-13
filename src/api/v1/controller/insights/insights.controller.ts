@@ -1,8 +1,10 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
+import axios from "axios";
 import ContentMetricsSnapshotModel from "../../../../models/contentMetricsSnapshot/contentMetricsSnapshot.model";
 import PlatformInsightsSnapshotModel from "../../../../models/platformInsightsSnapshot/platformInsightsSnapshot.model";
 import PostedContentModel from "../../../../models/postedContent/postedContent.model";
+import UserModel from "../../../../models/users/users.model";
 import {
   triggerUserSync,
   getLatestInsightsSummary,
@@ -334,6 +336,132 @@ export const getUserContentWithMetrics = async (req: Request, res: Response) => 
     });
   } catch (error: any) {
     console.error("[Insights] User content error:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * POST /api/v1/insights/fix-facebook-post-ids
+ * One-time migration: fixes Facebook image/video posts that have wrong platform_post_id.
+ * For image posts (photo ID without underscore), attempts to resolve the correct post ID.
+ */
+export const fixFacebookPostIds = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "userId is required" });
+    }
+
+    const user = await UserModel.findById(userId).lean();
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const fbData = (user as any).facebook;
+    if (!fbData?.access_token) {
+      return res.status(400).json({ success: false, message: "No Facebook token found" });
+    }
+
+    // Find Facebook posts that may have wrong IDs (no underscore = likely photo/video ID, not post ID)
+    const fbPosts = await PostedContentModel.find({
+      user_id: userId,
+      platform: "facebook",
+      platform_post_id: { $ne: null, $exists: true },
+      status: "published",
+    }).lean();
+
+    let fixedCount = 0;
+    const errors: string[] = [];
+
+    // Resolve page token
+    let pageAccessToken = fbData.access_token;
+    try {
+      const pagesRes = await axios.get(
+        "https://graph.facebook.com/v20.0/me/accounts",
+        {
+          params: {
+            fields: "id,access_token",
+            access_token: fbData.access_token,
+          },
+        }
+      );
+      const pages = pagesRes.data?.data || [];
+
+      for (const post of fbPosts) {
+        const postId = post.platform_post_id!;
+
+        // If post ID already has underscore format (pageId_postId), it's likely correct
+        if (postId.includes("_")) continue;
+
+        // This is likely a photo ID or video ID — try to resolve page token and fetch the post ID
+        const pageId = post.page_id || fbData.project_id;
+        const page = pages.find((p: any) => p.id === pageId);
+        const token = page?.access_token || pageAccessToken;
+
+        try {
+          // For photos, try to get the associated page post
+          if (post.media_type === "image") {
+            // The photo node has a link field and we can construct the post ID as pageId_photoId
+            const correctedId = `${pageId}_${postId}`;
+            // Verify the corrected ID works by making a test API call
+            const testRes = await axios.get(
+              `https://graph.facebook.com/v20.0/${correctedId}`,
+              {
+                params: {
+                  fields: "id,likes.summary(true),comments.summary(true),shares",
+                  access_token: token,
+                },
+              }
+            );
+
+            if (testRes.data?.id) {
+              await PostedContentModel.findByIdAndUpdate(post._id, {
+                $set: { platform_post_id: correctedId },
+              });
+              fixedCount++;
+            }
+          } else if (post.media_type === "video") {
+            const correctedId = `${pageId}_${postId}`;
+            const testRes = await axios.get(
+              `https://graph.facebook.com/v20.0/${correctedId}`,
+              {
+                params: {
+                  fields: "id",
+                  access_token: token,
+                },
+              }
+            );
+
+            if (testRes.data?.id) {
+              await PostedContentModel.findByIdAndUpdate(post._id, {
+                $set: { platform_post_id: correctedId },
+              });
+              fixedCount++;
+            }
+          }
+        } catch (err: any) {
+          errors.push(`Post ${postId}: ${err.message}`);
+        }
+      }
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Could not resolve Facebook pages: " + err.message,
+      });
+    }
+
+    // Trigger a sync to refresh engagement after fixing IDs
+    triggerUserSync(userId).catch(() => {});
+
+    return res.json({
+      success: true,
+      message: `Fixed ${fixedCount} post IDs`,
+      fixedCount,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error: any) {
+    console.error("[Insights] Fix FB post IDs error:", error.message);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

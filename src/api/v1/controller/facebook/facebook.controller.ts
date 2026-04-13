@@ -352,6 +352,7 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
       );
 
       // Save to history if not scheduled
+      // Use post_id (pageId_postId format) from photos endpoint for correct metrics fetching
       if (!scheduledPublishTime) {
         await PostedContentModel.create({
           user_id: userId,
@@ -360,7 +361,7 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
           media_urls: [finalImageUrl],
           media_type: "image",
           posted_at: new Date(),
-          platform_post_id: imgRes.data.id,
+          platform_post_id: imgRes.data.post_id || imgRes.data.id,
           is_scheduled: false,
           status: "published",
           page_id: pageId,
@@ -447,6 +448,7 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
       });
 
       // Save to history if not scheduled
+      // Construct proper post ID (pageId_videoId) for correct metrics fetching
       if (!scheduledPublishTime) {
         await PostedContentModel.create({
           user_id: userId,
@@ -455,7 +457,7 @@ export const postFacebookUniversal = async (req: Request, res: Response) => {
           media_urls: [finalVideoUrl],
           media_type: "video",
           posted_at: new Date(),
-          platform_post_id: resp.data.id,
+          platform_post_id: `${pageId}_${resp.data.id}`,
           is_scheduled: false,
           status: "published",
           page_id: pageId,

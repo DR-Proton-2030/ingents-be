@@ -11,6 +11,7 @@ import {
 import PostedContentModel from "../../../../models/postedContent/postedContent.model";
 import ScheduledPostModel from "../../../../models/scheduledPost/scheduledPost.model";
 import { uploadFileToS3Service } from "../../../../services/uploadFile/uploadFile";
+import { refreshEngagementForPosts } from "../../../../services/insights/engagementRefresh";
 
 /**
  * Schedule a new social media post
@@ -379,6 +380,11 @@ export const getUserPostedContent = async (req: Request, res: Response) => {
       platform as string | undefined,
       limit ? parseInt(limit as string, 10) : undefined
     );
+
+    // Refresh engagement metrics in the background for posts that haven't been synced recently
+    refreshEngagementForPosts(userId, postedContent).catch((err) => {
+      console.error("[PostedContent] Background engagement refresh failed:", err.message);
+    });
 
     return res.status(200).json({
       success: true,

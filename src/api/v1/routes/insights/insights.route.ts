@@ -6,6 +6,7 @@ import {
   getWeeklyEngagement,
   triggerSync,
   getUserContentWithMetrics,
+  fixFacebookPostIds,
 } from "../../controller/insights/insights.controller";
 
 const insightsRouter = Router();
@@ -27,5 +28,8 @@ insightsRouter.get("/summary", getInsightsSummary);
 
 // Trigger on-demand sync
 insightsRouter.post("/sync", triggerSync);
+
+// One-time fix for Facebook posts with wrong platform_post_id
+insightsRouter.post("/fix-facebook-post-ids", fixFacebookPostIds);
 
 export default insightsRouter;
