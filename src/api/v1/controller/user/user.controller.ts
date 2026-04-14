@@ -57,17 +57,14 @@ export const getAttendanceStats = async (req: Request, res: Response) => {
 
     // rows: 0 (11:00), 1 (10:00), 2 (09:00), 3 (08:00)
     // cols: 0 (Sun) to 6 (Sat)
-    const gridData = [
+    const rawGridCounts = [
       [0, 0, 0, 0, 0, 0, 0],
       [0, 0, 0, 0, 0, 0, 0],
       [0, 0, 0, 0, 0, 0, 0],
       [0, 0, 0, 0, 0, 0, 0],
     ];
 
-    // Some dummy data so they're not all grey for testing, but let's just make sure real values appear
     attendances.forEach(att => {
-      // Use the actual createdAt date to get hour and day
-      // Wait, Mongoose timestamps inject createdAt. We cast it:
       const date = (att as any).createdAt as Date;
       if (!date) return;
       const day = date.getDay(); // 0-6
@@ -77,27 +74,32 @@ export const getAttendanceStats = async (req: Request, res: Response) => {
       if (hour >= 11 && hour < 12) rowIndex = 0;
       else if (hour >= 10 && hour < 11) rowIndex = 1;
       else if (hour >= 9 && hour < 10) rowIndex = 2;
-      else if (hour >= 0 && hour < 9) rowIndex = 3; // Capturing everything morning up to 8:59 in the 08:00 row for better visuals
-      else if (hour >= 12) rowIndex = 0; // Capture afternoon checkins in top row just for visuals
+      else if (hour >= 0 && hour < 9) rowIndex = 3; 
+      else if (hour >= 12) rowIndex = 0; 
 
       if (rowIndex !== -1) {
-        gridData[rowIndex][day] += 1;
+        rawGridCounts[rowIndex][day] += 1;
       }
     });
 
+    const gridData: { count: number; intensity: number }[][] = [];
+
     for (let r = 0; r < 4; r++) {
+      const rowArr = [];
       for (let c = 0; c < 7; c++) {
-        const count = gridData[r][c];
-        if (totalUsers === 0 || count === 0) {
-           gridData[r][c] = 0;
-        } else {
+        const count = rawGridCounts[r][c];
+        let intensity = 0;
+        
+        if (totalUsers > 0 && count > 0) {
            const percent = count / totalUsers;
-           if (percent <= 0.25) gridData[r][c] = 1;
-           else if (percent <= 0.50) gridData[r][c] = 2;
-           else if (percent <= 0.75) gridData[r][c] = 3;
-           else gridData[r][c] = 4;
+           if (percent <= 0.25) intensity = 1;
+           else if (percent <= 0.50) intensity = 2;
+           else if (percent <= 0.75) intensity = 3;
+           else intensity = 4;
         }
+        rowArr.push({ count, intensity });
       }
+      gridData.push(rowArr);
     }
 
     return res.status(200).json({
