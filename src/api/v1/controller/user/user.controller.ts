@@ -39,6 +39,27 @@ export const markAttendance = async (req: Request, res: Response) => {
   }
 };
 
+export const checkAttendance = async (req: Request, res: Response) => {
+  try {
+    const user_id = req.user._id;
+    const today = new Date().toISOString().split("T")[0];
+
+    const existingAttendance = await AttendanceModel.findOne({
+      user_object_id: user_id,
+      date: today,
+    });
+
+    return res.status(200).json({
+      hasAttended: !!existingAttendance
+    });
+  } catch (error: any) {
+    console.error("checkAttendance failed:", error);
+    return res
+      .status(500)
+      .json({ message: "Checking attendance failed", error: error.message });
+  }
+};
+
 export const getAttendanceStats = async (req: Request, res: Response) => {
   try {
     const { company_object_id } = req.user;
