@@ -10,7 +10,10 @@ export type ActivityType =
   | "MEETING_DELETED"
   | "POST_SCHEDULED"
   | "POST_PUBLISHED"
-  | "SOCIAL_POSTED";
+  | "SOCIAL_POSTED"
+  | "CAMPAIGN_CREATED"
+  | "CAMPAIGN_UPDATED"
+  | "CAMPAIGN_DELETED";
 
 export interface IActivityLog {
   company_object_id: Types.ObjectId;
