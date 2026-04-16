@@ -12,6 +12,7 @@ import { postToYoutube } from "../youtube/postToYoutube";
 import { postToX } from "../x/postToX";
 import { Types } from "mongoose";
 import { SocialMediaJobData } from "../../types/interface/socialMediaJob.interface";
+import { sendWhatsappMessage } from "../whatsapp/whatsapp.service";
 
 // Track if Redis is available
 let isRedisAvailable = false;
@@ -294,6 +295,32 @@ export const processPostJob = async (job: Job<SocialMediaJobData>): Promise<any>
      const user = await UserModel.findById(campaign.created_by_user_object_id);
      if (!user) return { message: "User not found." };
      
+     if (campaign.type === "whatsapp_messenger") {
+        if (!user.whatsapp?.phone_number_id || !user.whatsapp?.access_token) {
+           return { message: "WhatsApp API credentials not found or disconnected." };
+        }
+        
+        const targetNumbers = campaign.target_numbers || [];
+        console.log(`[Scheduler] Firing recurring WhatsApp campaign ${campaign._id} to ${targetNumbers.length} numbers.`);
+
+        // Distribute messages securely (not async bombing at once) via delay buffer if needed, 
+        // for now just simple sequential queue processing
+        for (const number of targetNumbers) {
+           try {
+             await sendWhatsappMessage(
+                user.whatsapp.phone_number_id,
+                user.whatsapp.access_token,
+                number,
+                campaign.message_content
+             );
+           } catch (e) {
+             console.error(`Failed to send WhatsApp message to ${number}`, e);
+           }
+        }
+        return { success: true, message: "WhatsApp broadcast completed." };
+     }
+
+     // Social Broadcaster logic
      const platforms: ("facebook" | "instagram" | "youtube" | "x")[] = [];
      if (user.facebook?.access_token && user.facebook?.project_id) platforms.push("facebook");
      if (user.instagram?.access_token) platforms.push("instagram");

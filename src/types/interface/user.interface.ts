@@ -32,4 +32,9 @@ export interface IUser {
     refresh_token?: string;
     pkce_verifier?: string | null;
   };
+  whatsapp?: {
+    phone_number_id: string;
+    access_token: string;
+    waba_id?: string;
+  };
 }

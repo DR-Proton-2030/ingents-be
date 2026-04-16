@@ -10,6 +10,7 @@ export interface ICampaign {
   frequency: CampaignFrequency;
   recurring_days?: string[];
   scheduled_time?: string;
+  target_numbers?: string[];
   status: "active" | "draft" | "paused" | "completed";
   created_by_user_object_id: SchemaDefinitionProperty<Types.ObjectId>;
   company_object_id: SchemaDefinitionProperty<Types.ObjectId>;

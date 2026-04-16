@@ -61,6 +61,8 @@ app.options("*", (req, res) => {
   res.status(200).send();
 });
 
+import whatsappRouter from "./api/v1/routes/whatsapp/whatsapp.routes";
+
 // Routes
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/user", userRouter);
@@ -72,6 +74,7 @@ app.use("/api/v1/facebook", Facebookrouter);
 app.use("/api/v1/ig", instagramRouter);
 app.use("/api/v1/youtube", youtubeRouter);
 app.use("/api/v1/x", xRouter);
+app.use("/api/v1/whatsapp", whatsappRouter);
 app.use("/api/v1/bank", bankRouter);
 app.use("/api/v1/tasks", taskRouter);
 app.use("/api/v1/task-phase", taskPhaseRouter);

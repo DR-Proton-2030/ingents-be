@@ -41,6 +41,11 @@ const userSchema: Schema<IUser> = new Schema<IUser>(
       refresh_token: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
       pkce_verifier: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
     },
+    whatsapp: {
+      phone_number_id: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+      access_token: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+      waba_id: SCHEMA_DEFINITION_PROPERTY.optionalNullString,
+    },
   },
   {
     ...GENERAL_SCHEMA_OPTIONS,
