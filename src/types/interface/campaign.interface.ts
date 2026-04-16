@@ -11,6 +11,8 @@ export interface ICampaign {
   recurring_days?: string[];
   scheduled_time?: string;
   target_numbers?: string[];
+  ai_context?: string;
+  use_ai_generation?: boolean;
   status: "active" | "draft" | "paused" | "completed";
   created_by_user_object_id: SchemaDefinitionProperty<Types.ObjectId>;
   company_object_id: SchemaDefinitionProperty<Types.ObjectId>;

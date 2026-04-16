@@ -11,7 +11,9 @@ export const campaignSchema: Schema<ICampaign> = new Schema<ICampaign>(
       enum: ["social_broadcaster", "whatsapp_messenger"],
       required: true,
     },
-    message_content: SCHEMA_DEFINITION_PROPERTY.requiredString,
+    message_content: {
+      type: String,
+    },
     frequency: {
       type: String,
       enum: ["once", "recurring"],
@@ -27,6 +29,13 @@ export const campaignSchema: Schema<ICampaign> = new Schema<ICampaign>(
     target_numbers: {
       type: [String],
       default: [],
+    },
+    ai_context: {
+      type: String,
+    },
+    use_ai_generation: {
+      type: Boolean,
+      default: false,
     },
     status: {
       type: String,

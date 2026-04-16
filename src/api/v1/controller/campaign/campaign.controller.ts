@@ -4,14 +4,16 @@ import CampaignModel from "../../../../models/campaign/campaign.model";
 import { ICampaign } from "../../../../types/interface/campaign.interface";
 import { logActivity } from "../../../../services/activityLog/activityLog.service";
 import UserModel from "../../../../models/users/users.model";
-import { schedulePost, scheduleRecurringCampaign, cancelRecurringCampaign } from "../../../../services/scheduler/scheduler.service";
+import { schedulePost, scheduleRecurringCampaign, cancelRecurringCampaign, triggerCampaignNow } from "../../../../services/scheduler/scheduler.service";
 
 export const createCampaign = async (req: Request, res: Response) => {
   try {
-    const { name, type, message_content, frequency, recurring_days, scheduled_time } = req.body;
+    const { name, type, message_content, frequency, recurring_days, scheduled_time, target_numbers, ai_context, use_ai_generation } = req.body;
     const { _id: user_object_id, company_object_id } = req.user;
 
-    if (!name || !type || !message_content || !frequency) {
+    const isAiEnabled = use_ai_generation === true;
+
+    if (!name || !type || (!isAiEnabled && !message_content) || !frequency) {
       return res.status(400).json({ message: "Missing required fields" });
     }
     
@@ -22,10 +24,13 @@ export const createCampaign = async (req: Request, res: Response) => {
     const newCampaignPayload: ICampaign = {
       name,
       type,
-      message_content,
+      message_content: message_content || "",
       frequency,
       recurring_days: frequency === "recurring" ? recurring_days || [] : [],
       scheduled_time: frequency === "recurring" ? scheduled_time : undefined,
+      target_numbers: target_numbers || [],
+      ai_context,
+      use_ai_generation: isAiEnabled,
       status: "active",
       created_by_user_object_id: user_object_id,
       company_object_id: company_object_id!,
@@ -34,41 +39,19 @@ export const createCampaign = async (req: Request, res: Response) => {
     const newCampaign = await new CampaignModel(newCampaignPayload).save();
 
     // Dispatch to BullMQ based on Frequency
-    if (type === "social_broadcaster") {
-       if (frequency === "once") {
-          // Fire One-time immediately
-          const user = await UserModel.findById(user_object_id);
-          if (user) {
-            const platforms: ("facebook" | "instagram" | "youtube" | "x")[] = [];
-            if (user.facebook?.access_token && user.facebook?.project_id) platforms.push("facebook");
-            if (user.instagram?.access_token) platforms.push("instagram");
-            if (user.youtube?.access_token) platforms.push("youtube");
-            if (user.x?.access_token) platforms.push("x");
-            
-            for (const platform of platforms) {
-              try {
-                await schedulePost({
-                  user_id: new Types.ObjectId(user_object_id as string),
-                  platform,
-                  content: message_content,
-                  media_urls: [], 
-                  media_type: "text",
-                  hashtags: ["#campaign"],
-                  scheduled_at: new Date(Date.now() + 10000), // Schedule 10s from now
-                  page_id: platform === "facebook" ? user.facebook?.project_id : undefined,
-                });
-              } catch (e) {
-                console.error(`Failed to schedule campaign post for ${platform}`, e);
-              }
-            }
-          }
-       } else if (frequency === "recurring") {
-          // Register daily cron in BullMQ
-          try {
-             await scheduleRecurringCampaign(newCampaign._id.toString(), scheduled_time, recurring_days);
-          } catch(e) {
-             console.error("Failed to register repeating campaign job", e);
-          }
+    if (frequency === "once") {
+       // Fire One-time trigger (handles logic for both WhatsApp and Social + AI dynamic generation)
+       try {
+          await triggerCampaignNow(newCampaign._id.toString());
+       } catch (e) {
+          console.error("Failed to trigger one-time campaign", e);
+       }
+    } else if (frequency === "recurring") {
+       // Register daily cron in BullMQ
+       try {
+          await scheduleRecurringCampaign(newCampaign._id.toString(), scheduled_time, recurring_days);
+       } catch (e) {
+          console.error("Failed to register repeating campaign job", e);
        }
     }
 

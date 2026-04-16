@@ -13,6 +13,9 @@ import { postToX } from "../x/postToX";
 import { Types } from "mongoose";
 import { SocialMediaJobData } from "../../types/interface/socialMediaJob.interface";
 import { sendWhatsappMessage } from "../whatsapp/whatsapp.service";
+import { LLMWithRagService } from "../llmWithRag/llmWithRag.service";
+
+const llmService = new LLMWithRagService();
 
 // Track if Redis is available
 let isRedisAvailable = false;
@@ -116,7 +119,7 @@ export const scheduleRecurringCampaign = async (
   const numericDays = days.map(day => DAY_MAP[day]).filter(d => d !== undefined).join(",");
 
   if (!numericDays || !hours || !minutes) {
-     throw new Error("Invalid schedule parameters for repeatable job");
+    throw new Error("Invalid schedule parameters for repeatable job");
   }
 
   // standard cron: MINUTE HOUR * * DAYS
@@ -141,6 +144,22 @@ export const cancelRecurringCampaign = async (campaignId: string): Promise<void>
   if (job) {
     await queue.removeRepeatableByKey(job.key);
   }
+};
+
+
+// Trigger a campaign once (one-time blast)
+export const triggerCampaignNow = async (campaignId: string): Promise<void> => {
+  const queue = getQueue();
+  if (!queue) return;
+
+  await queue.add(
+    "campaign-trigger",
+    { campaignId } as any,
+    {
+      jobId: `campaign-trigger-once-${campaignId}-${Date.now()}`,
+      removeOnComplete: true,
+    }
+  );
 };
 
 // Cancel a scheduled post
@@ -285,67 +304,87 @@ export const getPostedContent = async (
 // Process the job - called by worker
 export const processPostJob = async (job: Job<SocialMediaJobData>): Promise<any> => {
   if (job.name === "campaign-trigger") {
-     const triggerData = job.data as any;
-     const campaign = await CampaignModel.findById(triggerData.campaignId);
-     
-     if (!campaign || campaign.status !== "active") {
-        return { message: "Campaign inactive or not found, ignored." };
-     }
+    const triggerData = job.data as any;
+    const campaign = await CampaignModel.findById(triggerData.campaignId);
 
-     const user = await UserModel.findById(campaign.created_by_user_object_id);
-     if (!user) return { message: "User not found." };
-     
-     if (campaign.type === "whatsapp_messenger") {
-        if (!user.whatsapp?.phone_number_id || !user.whatsapp?.access_token) {
-           return { message: "WhatsApp API credentials not found or disconnected." };
+    if (!campaign || campaign.status !== "active") {
+      return { message: "Campaign inactive or not found, ignored." };
+    }
+
+    const user = await UserModel.findById(campaign.created_by_user_object_id);
+    if (!user) return { message: "User not found." };
+
+    let finalContent = campaign.message_content;
+
+    if (campaign.use_ai_generation && campaign.ai_context) {
+      console.log(`[Scheduler] Generating AI content for campaign ${campaign._id}...`);
+      try {
+        // Use Gemini for high quality generative content
+        const result: any = await llmService.generateGeminiResponseWithRag(
+          `Generate a professional and engaging social media post based on this brief: "${campaign.ai_context}". Only return the post content text.`,
+          "You are a creative social media manager expert at writing viral and engaging posts."
+        );
+
+        if (result && result.text) {
+          finalContent = result.text;
+          console.log(`[Scheduler] AI Content generated successfully.`);
         }
-        
-        const targetNumbers = campaign.target_numbers || [];
-        console.log(`[Scheduler] Firing recurring WhatsApp campaign ${campaign._id} to ${targetNumbers.length} numbers.`);
+      } catch (err) {
+        console.error("[Scheduler] AI generation failed, falling back to static content.", err);
+      }
+    }
 
-        // Distribute messages securely (not async bombing at once) via delay buffer if needed, 
-        // for now just simple sequential queue processing
-        for (const number of targetNumbers) {
-           try {
-             await sendWhatsappMessage(
-                user.whatsapp.phone_number_id,
-                user.whatsapp.access_token,
-                number,
-                campaign.message_content
-             );
-           } catch (e) {
-             console.error(`Failed to send WhatsApp message to ${number}`, e);
-           }
+    if (campaign.type === "whatsapp_messenger") {
+      if (!user.whatsapp?.phone_number_id || !user.whatsapp?.access_token) {
+        return { message: "WhatsApp API credentials not found or disconnected." };
+      }
+
+      const targetNumbers = campaign.target_numbers || [];
+      console.log(`[Scheduler] Firing recurring WhatsApp campaign ${campaign._id} to ${targetNumbers.length} numbers.`);
+
+      // Distribute messages securely (not async bombing at once) via delay buffer if needed, 
+      // for now just simple sequential queue processing
+      for (const number of targetNumbers) {
+        try {
+          await sendWhatsappMessage(
+            user.whatsapp.phone_number_id,
+            user.whatsapp.access_token,
+            number,
+            finalContent
+          );
+        } catch (e) {
+          console.error(`Failed to send WhatsApp message to ${number}`, e);
         }
-        return { success: true, message: "WhatsApp broadcast completed." };
-     }
+      }
+      return { success: true, message: "WhatsApp broadcast completed." };
+    }
 
-     // Social Broadcaster logic
-     const platforms: ("facebook" | "instagram" | "youtube" | "x")[] = [];
-     if (user.facebook?.access_token && user.facebook?.project_id) platforms.push("facebook");
-     if (user.instagram?.access_token) platforms.push("instagram");
-     if (user.youtube?.access_token) platforms.push("youtube");
-     if (user.x?.access_token) platforms.push("x");
+    // Social Broadcaster logic
+    const platforms: ("facebook" | "instagram" | "youtube" | "x")[] = [];
+    if (user.facebook?.access_token && user.facebook?.project_id) platforms.push("facebook");
+    if (user.instagram?.access_token) platforms.push("instagram");
+    if (user.youtube?.access_token) platforms.push("youtube");
+    if (user.x?.access_token) platforms.push("x");
 
-     console.log(`[Scheduler] Firing recurring campaign ${campaign._id} to platforms:`, platforms);
+    console.log(`[Scheduler] Firing recurring campaign ${campaign._id} to platforms:`, platforms);
 
-     for (const platform of platforms) {
-       try {
-         await schedulePost({
-           user_id: new Types.ObjectId(user._id.toString()),
-           platform,
-           content: campaign.message_content,
-           media_urls: [], 
-           media_type: "text",
-           hashtags: ["#campaign"],
-           scheduled_at: new Date(Date.now() + 5000), // Minor offset
-           page_id: platform === "facebook" ? user.facebook?.project_id : undefined,
-         });
-       } catch (e) {
-         console.error(`Failed to propagate campaign post for ${platform}`, e);
-       }
-     }
-     return { success: true, message: "Campaign generated localized scheduled posts." };
+    for (const platform of platforms) {
+      try {
+        await schedulePost({
+          user_id: new Types.ObjectId(user._id.toString()),
+          platform,
+          content: finalContent,
+          media_urls: [],
+          media_type: "text",
+          hashtags: ["#campaign"],
+          scheduled_at: new Date(Date.now() + 5000), // Minor offset
+          page_id: platform === "facebook" ? user.facebook?.project_id : undefined,
+        });
+      } catch (e) {
+        console.error(`Failed to propagate campaign post for ${platform}`, e);
+      }
+    }
+    return { success: true, message: "Campaign generated localized scheduled posts." };
   }
 
   const { scheduledPostId, platform, userId, content, mediaUrls, hashtags, pageId, channelId, platformSpecificData } = job.data;
@@ -481,13 +520,13 @@ export const initializeWorker = async (): Promise<Worker<SocialMediaJobData> | n
       });
 
       // Suppress error events on test connection - we handle them in catch
-      testConnection.on("error", () => {});
+      testConnection.on("error", () => { });
 
       testConnection.connect()
         .then(async () => {
           await testConnection.ping();
           await testConnection.quit();
-          
+
           isRedisAvailable = true;
           console.log("\x1b[32m[Redis] Connection successful\x1b[0m");
 
@@ -531,9 +570,9 @@ export const initializeWorker = async (): Promise<Worker<SocialMediaJobData> | n
             console.log(`Job ${job?.id} completed successfully`);
           });
 
-            worker.on("failed", (job: Job<SocialMediaJobData> | undefined, err: Error) => {
+          worker.on("failed", (job: Job<SocialMediaJobData> | undefined, err: Error) => {
             console.error(`Job ${job?.id} failed with error:`, err.message);
-            });
+          });
 
           worker.on("error", (err: Error) => {
             console.error("Worker error:", err.message);
@@ -559,13 +598,13 @@ export const initializeWorker = async (): Promise<Worker<SocialMediaJobData> | n
 export const getQueueStatus = async () => {
   const queue = getQueue();
   if (!queue) {
-    return { 
+    return {
       available: false,
-      waiting: 0, 
-      active: 0, 
-      completed: 0, 
-      failed: 0, 
-      delayed: 0 
+      waiting: 0,
+      active: 0,
+      completed: 0,
+      failed: 0,
+      delayed: 0
     };
   }
 
