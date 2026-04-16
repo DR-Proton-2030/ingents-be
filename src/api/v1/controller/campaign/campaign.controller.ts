@@ -4,15 +4,19 @@ import CampaignModel from "../../../../models/campaign/campaign.model";
 import { ICampaign } from "../../../../types/interface/campaign.interface";
 import { logActivity } from "../../../../services/activityLog/activityLog.service";
 import UserModel from "../../../../models/users/users.model";
-import { schedulePost } from "../../../../services/scheduler/scheduler.service";
+import { schedulePost, scheduleRecurringCampaign, cancelRecurringCampaign } from "../../../../services/scheduler/scheduler.service";
 
 export const createCampaign = async (req: Request, res: Response) => {
   try {
-    const { name, type, message_content, frequency, recurring_days } = req.body;
+    const { name, type, message_content, frequency, recurring_days, scheduled_time } = req.body;
     const { _id: user_object_id, company_object_id } = req.user;
 
     if (!name || !type || !message_content || !frequency) {
       return res.status(400).json({ message: "Missing required fields" });
+    }
+    
+    if (frequency === "recurring" && (!scheduled_time || !recurring_days || recurring_days.length === 0)) {
+       return res.status(400).json({ message: "Missing schedule details for recurring campaign" });
     }
 
     const newCampaignPayload: ICampaign = {
@@ -21,6 +25,7 @@ export const createCampaign = async (req: Request, res: Response) => {
       message_content,
       frequency,
       recurring_days: frequency === "recurring" ? recurring_days || [] : [],
+      scheduled_time: frequency === "recurring" ? scheduled_time : undefined,
       status: "active",
       created_by_user_object_id: user_object_id,
       company_object_id: company_object_id!,
@@ -28,32 +33,43 @@ export const createCampaign = async (req: Request, res: Response) => {
 
     const newCampaign = await new CampaignModel(newCampaignPayload).save();
 
-    // Trigger Social Posts immediately if it's a social broadcast one-time for now to mock the actual recurring engine
+    // Dispatch to BullMQ based on Frequency
     if (type === "social_broadcaster") {
-      const user = await UserModel.findById(user_object_id);
-      if (user) {
-        const platforms: ("facebook" | "instagram" | "youtube" | "x")[] = [];
-        if (user.facebook?.access_token && user.facebook?.project_id) platforms.push("facebook");
-        if (user.instagram?.access_token) platforms.push("instagram");
-        if (user.x?.access_token) platforms.push("x");
-        
-        for (const platform of platforms) {
-          try {
-            await schedulePost({
-              user_id: new Types.ObjectId(user_object_id as string),
-              platform,
-              content: message_content,
-              media_urls: [], 
-              media_type: "text",
-              hashtags: ["#campaign", "#ingents"],
-              scheduled_at: new Date(Date.now() + 10000), // Schedule 10s from now
-              page_id: platform === "facebook" ? user.facebook?.project_id : undefined,
-            });
-          } catch (e) {
-            console.error(`Failed to schedule campaign post for ${platform}`, e);
+       if (frequency === "once") {
+          // Fire One-time immediately
+          const user = await UserModel.findById(user_object_id);
+          if (user) {
+            const platforms: ("facebook" | "instagram" | "youtube" | "x")[] = [];
+            if (user.facebook?.access_token && user.facebook?.project_id) platforms.push("facebook");
+            if (user.instagram?.access_token) platforms.push("instagram");
+            if (user.youtube?.access_token) platforms.push("youtube");
+            if (user.x?.access_token) platforms.push("x");
+            
+            for (const platform of platforms) {
+              try {
+                await schedulePost({
+                  user_id: new Types.ObjectId(user_object_id as string),
+                  platform,
+                  content: message_content,
+                  media_urls: [], 
+                  media_type: "text",
+                  hashtags: ["#campaign"],
+                  scheduled_at: new Date(Date.now() + 10000), // Schedule 10s from now
+                  page_id: platform === "facebook" ? user.facebook?.project_id : undefined,
+                });
+              } catch (e) {
+                console.error(`Failed to schedule campaign post for ${platform}`, e);
+              }
+            }
           }
-        }
-      }
+       } else if (frequency === "recurring") {
+          // Register daily cron in BullMQ
+          try {
+             await scheduleRecurringCampaign(newCampaign._id.toString(), scheduled_time, recurring_days);
+          } catch(e) {
+             console.error("Failed to register repeating campaign job", e);
+          }
+       }
     }
 
     logActivity({
@@ -133,6 +149,15 @@ export const updateCampaignStatus = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Campaign not found" });
     }
 
+    // Toggle repeatable job based on new status
+    if (campaign.frequency === "recurring") {
+       if (status === "active") {
+          await scheduleRecurringCampaign(campaign._id.toString(), campaign.scheduled_time || "09:00", campaign.recurring_days || []);
+       } else {
+          await cancelRecurringCampaign(campaign._id.toString());
+       }
+    }
+
     logActivity({
       company_object_id: company_object_id?.toString(),
       actor_object_id: req.user?._id?.toString(),
@@ -164,6 +189,10 @@ export const deleteCampaign = async (req: Request, res: Response) => {
 
     if (!campaign) {
       return res.status(404).json({ message: "Campaign not found" });
+    }
+
+    if (campaign.frequency === "recurring") {
+       await cancelRecurringCampaign(campaignId);
     }
 
     logActivity({

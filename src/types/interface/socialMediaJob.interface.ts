@@ -9,4 +9,5 @@ export interface SocialMediaJobData {
   pageId?: string;
   channelId?: string;
   platformSpecificData?: Record<string, any>;
+  campaignId?: string;
 }

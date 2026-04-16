@@ -3,6 +3,8 @@ import { Redis } from "ioredis";
 import { REDIS_CONFIG, QUEUE_NAMES, DEFAULT_JOB_OPTIONS } from "../../config/redis.config";
 import ScheduledPostModel from "../../models/scheduledPost/scheduledPost.model";
 import PostedContentModel from "../../models/postedContent/postedContent.model";
+import CampaignModel from "../../models/campaign/campaign.model";
+import UserModel from "../../models/users/users.model";
 import { IScheduledPost } from "../../models/scheduledPost/scheduledPost.schema";
 import { postToFacebook } from "../facebook/postToFacebook";
 import { postToInstagram } from "../instagram/postToInstagram";
@@ -87,6 +89,57 @@ export const schedulePost = async (
   // If Redis not available, post stays in pending state in DB
 
   return scheduledPost;
+};
+
+// Map day strings to cron day numbers (0-6)
+const DAY_MAP: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+// Schedule a repeatable campaign trigger
+export const scheduleRecurringCampaign = async (
+  campaignId: string,
+  timeString: string, // format: "HH:MM" e.g., "14:30"
+  days: string[] // e.g., ["Mon", "Wed"]
+): Promise<void> => {
+  const queue = getQueue();
+  if (!queue) return;
+
+  const [hours, minutes] = timeString.split(":");
+  const numericDays = days.map(day => DAY_MAP[day]).filter(d => d !== undefined).join(",");
+
+  if (!numericDays || !hours || !minutes) {
+     throw new Error("Invalid schedule parameters for repeatable job");
+  }
+
+  // standard cron: MINUTE HOUR * * DAYS
+  const cronPattern = `${parseInt(minutes)} ${parseInt(hours)} * * ${numericDays}`;
+
+  await queue.add(
+    "campaign-trigger",
+    { campaignId } as any, // bypassing interface strictness for the trigger payload
+    {
+      repeat: { pattern: cronPattern },
+      jobId: `campaign-trigger-${campaignId}`,
+    }
+  );
+};
+
+// Cancel a repeatable campaign trigger
+export const cancelRecurringCampaign = async (campaignId: string): Promise<void> => {
+  const queue = getQueue();
+  if (!queue) return;
+  const repeatableJobs = await queue.getRepeatableJobs();
+  const job = repeatableJobs.find(j => j.id === `campaign-trigger-${campaignId}`);
+  if (job) {
+    await queue.removeRepeatableByKey(job.key);
+  }
 };
 
 // Cancel a scheduled post
@@ -230,6 +283,44 @@ export const getPostedContent = async (
 
 // Process the job - called by worker
 export const processPostJob = async (job: Job<SocialMediaJobData>): Promise<any> => {
+  if (job.name === "campaign-trigger") {
+     const triggerData = job.data as any;
+     const campaign = await CampaignModel.findById(triggerData.campaignId);
+     
+     if (!campaign || campaign.status !== "active") {
+        return { message: "Campaign inactive or not found, ignored." };
+     }
+
+     const user = await UserModel.findById(campaign.created_by_user_object_id);
+     if (!user) return { message: "User not found." };
+     
+     const platforms: ("facebook" | "instagram" | "youtube" | "x")[] = [];
+     if (user.facebook?.access_token && user.facebook?.project_id) platforms.push("facebook");
+     if (user.instagram?.access_token) platforms.push("instagram");
+     if (user.youtube?.access_token) platforms.push("youtube");
+     if (user.x?.access_token) platforms.push("x");
+
+     console.log(`[Scheduler] Firing recurring campaign ${campaign._id} to platforms:`, platforms);
+
+     for (const platform of platforms) {
+       try {
+         await schedulePost({
+           user_id: new Types.ObjectId(user._id.toString()),
+           platform,
+           content: campaign.message_content,
+           media_urls: [], 
+           media_type: "text",
+           hashtags: ["#campaign"],
+           scheduled_at: new Date(Date.now() + 5000), // Minor offset
+           page_id: platform === "facebook" ? user.facebook?.project_id : undefined,
+         });
+       } catch (e) {
+         console.error(`Failed to propagate campaign post for ${platform}`, e);
+       }
+     }
+     return { success: true, message: "Campaign generated localized scheduled posts." };
+  }
+
   const { scheduledPostId, platform, userId, content, mediaUrls, hashtags, pageId, channelId, platformSpecificData } = job.data;
 
   // Update status to processing

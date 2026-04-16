@@ -21,6 +21,9 @@ export const campaignSchema: Schema<ICampaign> = new Schema<ICampaign>(
       type: [String],
       default: [],
     },
+    scheduled_time: {
+      type: String,
+    },
     status: {
       type: String,
       enum: ["active", "draft", "paused", "completed"],
