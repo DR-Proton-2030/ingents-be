@@ -13,6 +13,7 @@ export const REDIS_CONFIG = {
 // Queue Names
 export const QUEUE_NAMES = {
   SOCIAL_MEDIA_POST: "social-media-post-queue",
+  SUBSCRIPTION_MANAGEMENT: "subscription-management-queue",
 };
 
 // Job Options

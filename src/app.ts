@@ -27,8 +27,10 @@ import insightsRouter from "./api/v1/routes/insights/insights.route";
 import todoRouter from "./api/v1/routes/todo/todo.routes";
 import activityLogRouter from "./api/v1/routes/activityLog/activityLog.routes";
 import campaignRouter from "./api/v1/routes/campaign/campaign.routes";
+import subscriptionRouter from "./api/v1/routes/subscription/subscription.routes";
 import { initializeWorker } from "./services/scheduler/scheduler.service";
 import { initializeInsightsWorker } from "./services/insights/insightsSync.service";
+import { initializeSubscriptionWorker } from "./services/subscription/subscription.worker";
 
 const app = express();
 
@@ -88,6 +90,7 @@ app.use("/api/v1/insights", insightsRouter);
 app.use("/api/v1/todos", todoRouter);
 app.use("/api/v1/activity", activityLogRouter);
 app.use("/api/v1/campaign", campaignRouter);
+app.use("/api/v1/subscription", subscriptionRouter);
 
 // Initialize BullMQ Worker for Social Media Scheduler (async, non-blocking)
 initializeWorker()
@@ -113,6 +116,19 @@ initializeInsightsWorker()
   })
   .catch((error) => {
     console.warn("\x1b[33m[BullMQ] Insights Sync initialization skipped\x1b[0m");
+  });
+
+// Initialize BullMQ Worker for Subscription Management (async, non-blocking)
+initializeSubscriptionWorker()
+  .then((worker) => {
+    if (worker) {
+      console.log(
+        "\x1b[32m \x1b[1m[BullMQ] Subscription Worker initialized\x1b[0m",
+      );
+    }
+  })
+  .catch((error) => {
+    console.warn("\x1b[33m[BullMQ] Subscription Worker initialization skipped\x1b[0m");
   });
 
 // Default route for health check
