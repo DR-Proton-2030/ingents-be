@@ -135,12 +135,18 @@ export const getAttendanceStats = async (req: Request, res: Response) => {
   }
 };
 
+import { hashPassword } from "../../../../services/passwordControl/hashPassword";
+
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { userId, ...payload } = req.body;
 
     if (!userId) {
       return res.status(400).json({ message: "Missing userId" });
+    }
+
+    if (payload.password) {
+      payload.password = await hashPassword(payload.password);
     }
 
     // Fetch existing user to merge nested objects
