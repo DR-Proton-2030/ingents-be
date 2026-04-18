@@ -67,45 +67,45 @@ export const getAttendanceStats = async (req: Request, res: Response) => {
     const totalUsers = await UserModel.countDocuments({ company_object_id, has_joined: true });
 
     const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay()); // Start on Sunday
-    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    const attendances = await AttendanceModel.find({
+    // Current month attendances
+    const currentAttendances = await AttendanceModel.find({
       company_object_id,
-      createdAt: { $gte: startOfWeek }
+      createdAt: { $gte: startOfCurrentMonth }
     });
 
-    // rows: 0 (11:00), 1 (10:00), 2 (09:00), 3 (08:00)
-    // cols: 0 (Sun) to 6 (Sat)
-    const rawGridCounts = [
-      [0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0],
-    ];
+    // Previous month attendances (for percentage calculation)
+    const prevAttendances = await AttendanceModel.find({
+      company_object_id,
+      createdAt: { $gte: startOfPrevMonth, $lte: endOfPrevMonth }
+    });
 
-    attendances.forEach(att => {
+    // 5 Weeks x 7 Days grid
+    const rawGridCounts = Array.from({ length: 5 }, () => Array(7).fill(0));
+
+    currentAttendances.forEach(att => {
       const date = (att as any).createdAt as Date;
       if (!date) return;
-      const day = date.getDay(); // 0-6
-      const hour = date.getHours(); 
+      
+      const dayOfMonth = date.getDate();
+      const dayOfWeek = date.getDay(); // 0-6
+      
+      // Calculate week index (roughly)
+      // We'll use: Math.floor((dayOfMonth - 1 + startOfCurrentMonth.getDay()) / 7)
+      const firstDayOffset = startOfCurrentMonth.getDay();
+      const weekIndex = Math.floor((dayOfMonth - 1 + firstDayOffset) / 7);
 
-      let rowIndex = -1;
-      if (hour >= 11 && hour < 12) rowIndex = 0;
-      else if (hour >= 10 && hour < 11) rowIndex = 1;
-      else if (hour >= 9 && hour < 10) rowIndex = 2;
-      else if (hour >= 0 && hour < 9) rowIndex = 3; 
-      else if (hour >= 12) rowIndex = 0; 
-
-      if (rowIndex !== -1) {
-        rawGridCounts[rowIndex][day] += 1;
+      if (weekIndex < 5) {
+        rawGridCounts[weekIndex][dayOfWeek] += 1;
       }
     });
 
     const gridData: { count: number; intensity: number }[][] = [];
 
-    for (let r = 0; r < 4; r++) {
+    for (let r = 0; r < 5; r++) {
       const rowArr = [];
       for (let c = 0; c < 7; c++) {
         const count = rawGridCounts[r][c];
@@ -123,10 +123,21 @@ export const getAttendanceStats = async (req: Request, res: Response) => {
       gridData.push(rowArr);
     }
 
+    // Calculate percentage change
+    const currentAvg = totalUsers > 0 ? currentAttendances.length / (totalUsers * now.getDate()) : 0;
+    const prevAvg = totalUsers > 0 ? prevAttendances.length / (totalUsers * endOfPrevMonth.getDate()) : 0;
+    
+    let overallPercentage = 0;
+    if (prevAvg > 0) {
+      overallPercentage = Math.round(((currentAvg - prevAvg) / prevAvg) * 100);
+    } else if (currentAvg > 0) {
+      overallPercentage = 100;
+    }
+
     return res.status(200).json({
       data: {
          gridData,
-         overallPercentage: 15 // Mock fixed % for last month comparison based on design
+         overallPercentage
       }
     });
   } catch (error: any) {
