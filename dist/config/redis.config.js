@@ -16,6 +16,7 @@ exports.REDIS_CONFIG = {
 // Queue Names
 exports.QUEUE_NAMES = {
     SOCIAL_MEDIA_POST: "social-media-post-queue",
+    SUBSCRIPTION_MANAGEMENT: "subscription-management-queue",
 };
 // Job Options
 exports.DEFAULT_JOB_OPTIONS = {

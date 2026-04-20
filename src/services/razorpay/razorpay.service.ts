@@ -4,9 +4,9 @@ import crypto from "crypto";
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "rzp_test_SYlbshsg5rKnuO";
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "GEnd1u6iTgpA85oFstR9uf1J";
 
-let razorpayInstance: Razorpay;
+let razorpayInstance: InstanceType<typeof Razorpay>;
 
-export const getRazorpayInstance = (): Razorpay => {
+export const getRazorpayInstance = (): InstanceType<typeof Razorpay> => {
   if (!razorpayInstance) {
     razorpayInstance = new Razorpay({
       key_id: RAZORPAY_KEY_ID,

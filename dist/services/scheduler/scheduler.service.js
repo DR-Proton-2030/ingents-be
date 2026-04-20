@@ -12,17 +12,22 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isSchedulerAvailable = exports.getQueueStatus = exports.initializeWorker = exports.processPostJob = exports.getPostedContent = exports.getScheduledPosts = exports.reschedulePost = exports.cancelScheduledPost = exports.schedulePost = void 0;
+exports.isSchedulerAvailable = exports.getQueueStatus = exports.initializeWorker = exports.processPostJob = exports.getPostedContent = exports.getScheduledPosts = exports.reschedulePost = exports.cancelScheduledPost = exports.triggerCampaignNow = exports.cancelRecurringCampaign = exports.scheduleRecurringCampaign = exports.schedulePost = void 0;
 const bullmq_1 = require("bullmq");
 const ioredis_1 = require("ioredis");
 const redis_config_1 = require("../../config/redis.config");
 const scheduledPost_model_1 = __importDefault(require("../../models/scheduledPost/scheduledPost.model"));
 const postedContent_model_1 = __importDefault(require("../../models/postedContent/postedContent.model"));
+const campaign_model_1 = __importDefault(require("../../models/campaign/campaign.model"));
+const users_model_1 = __importDefault(require("../../models/users/users.model"));
 const postToFacebook_1 = require("../facebook/postToFacebook");
 const postToInstagram_1 = require("../instagram/postToInstagram");
 const postToYoutube_1 = require("../youtube/postToYoutube");
 const postToX_1 = require("../x/postToX");
 const mongoose_1 = require("mongoose");
+const whatsapp_service_1 = require("../whatsapp/whatsapp.service");
+const llmWithRag_service_1 = require("../llmWithRag/llmWithRag.service");
+const llmService = new llmWithRag_service_1.LLMWithRagService();
 // Track if Redis is available
 let isRedisAvailable = false;
 let socialMediaQueue = null;
@@ -84,6 +89,60 @@ const schedulePost = (postData) => __awaiter(void 0, void 0, void 0, function* (
     return scheduledPost;
 });
 exports.schedulePost = schedulePost;
+// Map day strings to cron day numbers (0-6)
+const DAY_MAP = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+};
+// Schedule a repeatable campaign trigger
+const scheduleRecurringCampaign = (campaignId, timeString, // format: "HH:MM" e.g., "14:30"
+days // e.g., ["Mon", "Wed"]
+) => __awaiter(void 0, void 0, void 0, function* () {
+    const queue = getQueue();
+    if (!queue)
+        return;
+    const [hours, minutes] = timeString.split(":");
+    const numericDays = days.map(day => DAY_MAP[day]).filter(d => d !== undefined).join(",");
+    if (!numericDays || !hours || !minutes) {
+        throw new Error("Invalid schedule parameters for repeatable job");
+    }
+    // standard cron: MINUTE HOUR * * DAYS
+    const cronPattern = `${parseInt(minutes)} ${parseInt(hours)} * * ${numericDays}`;
+    yield queue.add("campaign-trigger", { campaignId }, // bypassing interface strictness for the trigger payload
+    {
+        repeat: { pattern: cronPattern },
+        jobId: `campaign-trigger-${campaignId}`,
+    });
+});
+exports.scheduleRecurringCampaign = scheduleRecurringCampaign;
+// Cancel a repeatable campaign trigger
+const cancelRecurringCampaign = (campaignId) => __awaiter(void 0, void 0, void 0, function* () {
+    const queue = getQueue();
+    if (!queue)
+        return;
+    const repeatableJobs = yield queue.getRepeatableJobs();
+    const job = repeatableJobs.find(j => j.id === `campaign-trigger-${campaignId}`);
+    if (job) {
+        yield queue.removeRepeatableByKey(job.key);
+    }
+});
+exports.cancelRecurringCampaign = cancelRecurringCampaign;
+// Trigger a campaign once (one-time blast)
+const triggerCampaignNow = (campaignId) => __awaiter(void 0, void 0, void 0, function* () {
+    const queue = getQueue();
+    if (!queue)
+        return;
+    yield queue.add("campaign-trigger", { campaignId }, {
+        jobId: `campaign-trigger-once-${campaignId}-${Date.now()}`,
+        removeOnComplete: true,
+    });
+});
+exports.triggerCampaignNow = triggerCampaignNow;
 // Cancel a scheduled post
 const cancelScheduledPost = (postId) => __awaiter(void 0, void 0, void 0, function* () {
     const scheduledPost = yield scheduledPost_model_1.default.findById(postId);
@@ -185,7 +244,79 @@ const getPostedContent = (userId, platform, limit) => __awaiter(void 0, void 0, 
 exports.getPostedContent = getPostedContent;
 // Process the job - called by worker
 const processPostJob = (job) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    if (job.name === "campaign-trigger") {
+        const triggerData = job.data;
+        const campaign = yield campaign_model_1.default.findById(triggerData.campaignId);
+        if (!campaign || campaign.status !== "active") {
+            return { message: "Campaign inactive or not found, ignored." };
+        }
+        const user = yield users_model_1.default.findById(campaign.created_by_user_object_id);
+        if (!user)
+            return { message: "User not found." };
+        let finalContent = campaign.message_content;
+        if (campaign.use_ai_generation && campaign.ai_context) {
+            console.log(`[Scheduler] Generating AI content for campaign ${campaign._id}...`);
+            try {
+                // Use Gemini for high quality generative content
+                const result = yield llmService.generateGeminiResponseWithRag(`Generate a professional and engaging social media post based on this brief: "${campaign.ai_context}". Only return the post content text.`, "You are a creative social media manager expert at writing viral and engaging posts.");
+                if (result && result.text) {
+                    finalContent = result.text;
+                    console.log(`[Scheduler] AI Content generated successfully.`);
+                }
+            }
+            catch (err) {
+                console.error("[Scheduler] AI generation failed, falling back to static content.", err);
+            }
+        }
+        if (campaign.type === "whatsapp_messenger") {
+            if (!((_a = user.whatsapp) === null || _a === void 0 ? void 0 : _a.phone_number_id) || !((_b = user.whatsapp) === null || _b === void 0 ? void 0 : _b.access_token)) {
+                return { message: "WhatsApp API credentials not found or disconnected." };
+            }
+            const targetNumbers = campaign.target_numbers || [];
+            console.log(`[Scheduler] Firing recurring WhatsApp campaign ${campaign._id} to ${targetNumbers.length} numbers.`);
+            // Distribute messages securely (not async bombing at once) via delay buffer if needed, 
+            // for now just simple sequential queue processing
+            for (const number of targetNumbers) {
+                try {
+                    yield (0, whatsapp_service_1.sendWhatsappMessage)(user.whatsapp.phone_number_id, user.whatsapp.access_token, number, finalContent);
+                }
+                catch (e) {
+                    console.error(`Failed to send WhatsApp message to ${number}`, e);
+                }
+            }
+            return { success: true, message: "WhatsApp broadcast completed." };
+        }
+        // Social Broadcaster logic
+        const platforms = [];
+        if (((_c = user.facebook) === null || _c === void 0 ? void 0 : _c.access_token) && ((_d = user.facebook) === null || _d === void 0 ? void 0 : _d.project_id))
+            platforms.push("facebook");
+        if ((_e = user.instagram) === null || _e === void 0 ? void 0 : _e.access_token)
+            platforms.push("instagram");
+        if ((_f = user.youtube) === null || _f === void 0 ? void 0 : _f.access_token)
+            platforms.push("youtube");
+        if ((_g = user.x) === null || _g === void 0 ? void 0 : _g.access_token)
+            platforms.push("x");
+        console.log(`[Scheduler] Firing recurring campaign ${campaign._id} to platforms:`, platforms);
+        for (const platform of platforms) {
+            try {
+                yield (0, exports.schedulePost)({
+                    user_id: new mongoose_1.Types.ObjectId(user._id.toString()),
+                    platform,
+                    content: finalContent,
+                    media_urls: [],
+                    media_type: "text",
+                    hashtags: ["#campaign"],
+                    scheduled_at: new Date(Date.now() + 5000), // Minor offset
+                    page_id: platform === "facebook" ? (_h = user.facebook) === null || _h === void 0 ? void 0 : _h.project_id : undefined,
+                });
+            }
+            catch (e) {
+                console.error(`Failed to propagate campaign post for ${platform}`, e);
+            }
+        }
+        return { success: true, message: "Campaign generated localized scheduled posts." };
+    }
     const { scheduledPostId, platform, userId, content, mediaUrls, hashtags, pageId, channelId, platformSpecificData } = job.data;
     // Update status to processing
     yield scheduledPost_model_1.default.findByIdAndUpdate(scheduledPostId, {
@@ -234,7 +365,7 @@ const processPostJob = (job) => __awaiter(void 0, void 0, void 0, function* () {
                     mediaUrls,
                     hashtags,
                 });
-                platformPostId = (_a = platformResponse === null || platformResponse === void 0 ? void 0 : platformResponse.data) === null || _a === void 0 ? void 0 : _a.id;
+                platformPostId = (_j = platformResponse === null || platformResponse === void 0 ? void 0 : platformResponse.data) === null || _j === void 0 ? void 0 : _j.id;
                 break;
             default:
                 throw new Error(`Unknown platform: ${platform}`);
@@ -251,7 +382,7 @@ const processPostJob = (job) => __awaiter(void 0, void 0, void 0, function* () {
             platform,
             content,
             media_urls: mediaUrls,
-            media_type: (mediaUrls === null || mediaUrls === void 0 ? void 0 : mediaUrls.length) ? (((_b = mediaUrls[0]) === null || _b === void 0 ? void 0 : _b.includes("video")) ? "video" : "image") : "text",
+            media_type: (mediaUrls === null || mediaUrls === void 0 ? void 0 : mediaUrls.length) ? (((_k = mediaUrls[0]) === null || _k === void 0 ? void 0 : _k.includes("video")) ? "video" : "image") : "text",
             hashtags,
             posted_at: new Date(),
             platform_post_id: platformPostId,

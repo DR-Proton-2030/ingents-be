@@ -42,6 +42,11 @@ const userSchema = new mongoose_1.Schema({
         refresh_token: model_constant_1.default.optionalNullString,
         pkce_verifier: model_constant_1.default.optionalNullString,
     },
+    whatsapp: {
+        phone_number_id: model_constant_1.default.optionalNullString,
+        access_token: model_constant_1.default.optionalNullString,
+        waba_id: model_constant_1.default.optionalNullString,
+    },
 }, Object.assign(Object.assign({}, schemaOption_1.GENERAL_SCHEMA_OPTIONS), { toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 const CompanyVirtualReference = {
     ref: "companies",

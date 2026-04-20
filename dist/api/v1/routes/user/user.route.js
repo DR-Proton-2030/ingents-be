@@ -9,4 +9,7 @@ userRouter.get("/get-user", userAuth_1.userAuth, user_controller_1.getUsers);
 userRouter.get("/get-user-details/:id", user_controller_1.getUserById);
 userRouter.patch("/update-user", userAuth_1.userAuth, user_controller_1.updateUser);
 userRouter.get("/search-users", userAuth_1.userAuth, user_controller_1.searchUsers);
+userRouter.post("/mark-attendance", userAuth_1.userAuth, user_controller_1.markAttendance);
+userRouter.get("/check-attendance", userAuth_1.userAuth, user_controller_1.checkAttendance);
+userRouter.get("/attendance-stats", userAuth_1.userAuth, user_controller_1.getAttendanceStats);
 exports.default = userRouter;

@@ -32,3 +32,5 @@ export const REDIRECT_URI = process.env.REDIRECT_URI;
 
 export const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
 export const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+
+export const COMPOSIO_API_KEY = process.env.COMPOSIO_API_KEY;

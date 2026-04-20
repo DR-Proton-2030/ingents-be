@@ -31,6 +31,8 @@ import subscriptionRouter from "./api/v1/routes/subscription/subscription.routes
 import { initializeWorker } from "./services/scheduler/scheduler.service";
 import { initializeInsightsWorker } from "./services/insights/insightsSync.service";
 import { initializeSubscriptionWorker } from "./services/subscription/subscription.worker";
+import composioRouter from "./api/v1/routes/composio/composio.routes";
+import virtualAssistantRouter from "./api/v1/routes/virtualAssistant/virtualAssistant.routes";
 
 const app = express();
 
@@ -91,6 +93,8 @@ app.use("/api/v1/todos", todoRouter);
 app.use("/api/v1/activity", activityLogRouter);
 app.use("/api/v1/campaign", campaignRouter);
 app.use("/api/v1/subscription", subscriptionRouter);
+app.use("/api/v1/integrations", composioRouter);
+app.use("/api/v1/virtual-assistant", virtualAssistantRouter);
 
 // Initialize BullMQ Worker for Social Media Scheduler (async, non-blocking)
 initializeWorker()
