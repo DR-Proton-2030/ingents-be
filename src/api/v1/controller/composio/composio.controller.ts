@@ -7,11 +7,15 @@ import * as composioService from "../../../../services/composio/composio.service
 export const getIntegrations = async (req: any, res: any) => {
     try {
         const userId = req.user._id.toString();
+        const projectContext =
+            typeof req.query?.projectContext === "string"
+                ? req.query.projectContext
+                : undefined;
         
         // Parallel fetch for speed
         const [availableApps, userConnections] = await Promise.all([
             composioService.listAvailableApps(),
-            composioService.listUserConnections(userId)
+            composioService.listUserConnections(userId, projectContext)
         ]);
 
         const activeConnectionsByToolkit = new Map<string, any>();
@@ -62,7 +66,7 @@ export const getIntegrations = async (req: any, res: any) => {
 export const initiateConnection = async (req: any, res: any) => {
     try {
         const userId = req.user._id.toString();
-        const { toolkitName, redirectUrl } = req.body;
+        const { toolkitName, redirectUrl, projectContext } = req.body;
 
         if (!toolkitName) {
             return res.status(400).json({
@@ -74,7 +78,8 @@ export const initiateConnection = async (req: any, res: any) => {
         const authUrl = await composioService.getAuthorizationUrl(
             userId,
             toolkitName,
-            redirectUrl
+            redirectUrl,
+            typeof projectContext === "string" ? projectContext : undefined
         );
 
         return res.status(200).json({
@@ -97,7 +102,7 @@ export const initiateConnection = async (req: any, res: any) => {
 export const executeAction = async (req: any, res: any) => {
     try {
         const userId = req.user._id.toString();
-        const { actionName, parameters } = req.body;
+        const { actionName, parameters, projectContext } = req.body;
 
         if (!actionName) {
             return res.status(400).json({
@@ -106,7 +111,12 @@ export const executeAction = async (req: any, res: any) => {
             });
         }
 
-        const result = await composioService.executeAppAction(userId, actionName, parameters || {});
+        const result = await composioService.executeAppAction(
+            userId,
+            actionName,
+            parameters || {},
+            typeof projectContext === "string" ? projectContext : undefined
+        );
 
         return res.status(200).json({
             success: true,

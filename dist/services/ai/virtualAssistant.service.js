@@ -84,9 +84,10 @@ const chatWithAssistant = (userId, messages, projectContext) => __awaiter(void 0
             throw new Error("OPEN_AI_API_KEY is not defined in environment variables.");
         }
         const composio = composioService.getComposioInstance();
-        const session = yield composioService.createComposioSession(userId);
+        const scopedComposioUserId = composioService.buildScopedComposioUserId(userId, projectContext);
+        const session = yield composioService.createComposioSession(userId, projectContext);
         const [toolState, tools] = yield Promise.all([
-            session.toolkits({ limit: 100 }),
+            session.toolkits({ limit: 50 }),
             session.tools(),
         ]);
         const connectedApps = toolState.items
@@ -125,7 +126,7 @@ const chatWithAssistant = (userId, messages, projectContext) => __awaiter(void 0
                     usedTools.add(toolCall.custom.name);
                 }
             });
-            const toolResults = yield composio.provider.handleToolCalls(userId, response);
+            const toolResults = yield composio.provider.handleToolCalls(scopedComposioUserId, response);
             conversation.push(response.choices[0].message);
             for (const [index, toolCall] of toolCalls.entries()) {
                 conversation.push({

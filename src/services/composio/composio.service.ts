@@ -14,6 +14,8 @@ const TOOLKIT_ALIAS_MAP: Record<string, string> = {
 const DEFAULT_CONNECT_CALLBACK =
     `${FRONTEND_URL || "http://localhost:3000"}/dashboard/project-management`;
 
+const PROJECT_SCOPE_SEPARATOR = "__project__";
+
 const ensureComposioApiKey = () => {
     if (!COMPOSIO_API_KEY) {
         throw new Error("COMPOSIO_API_KEY is not defined in environment variables.");
@@ -22,6 +24,19 @@ const ensureComposioApiKey = () => {
 
 const normalizeToolkitName = (toolkitName: string) =>
     toolkitName.trim().toLowerCase();
+
+const sanitizeScopeSegment = (value: string) =>
+    value.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+
+export const buildScopedComposioUserId = (userId: string, projectContext?: string) => {
+    const normalizedUserId = sanitizeScopeSegment(userId);
+    if (!projectContext || !projectContext.trim()) {
+        return normalizedUserId;
+    }
+
+    const normalizedProject = sanitizeScopeSegment(projectContext);
+    return `${normalizedUserId}${PROJECT_SCOPE_SEPARATOR}${normalizedProject}`;
+};
 
 export const getComposioInstance = (): Composio => {
     if (!composioInstance) {
@@ -33,9 +48,11 @@ export const getComposioInstance = (): Composio => {
     return composioInstance;
 };
 
-export const createComposioSession = async (userId: string) => {
+export const createComposioSession = async (userId: string, projectContext?: string) => {
     const composio = getComposioInstance();
-    return composio.create(userId, {
+    const scopedUserId = buildScopedComposioUserId(userId, projectContext);
+
+    return composio.create(scopedUserId, {
         manageConnections: true,
     });
 };
@@ -67,9 +84,14 @@ const resolveToolkitSlug = async (toolkitName: string) => {
 /**
  * Generate a connect link URL for a user to authorize a toolkit.
  */
-export const getAuthorizationUrl = async (userId: string, toolkitName: string, redirectUrl?: string) => {
+export const getAuthorizationUrl = async (
+    userId: string,
+    toolkitName: string,
+    redirectUrl?: string,
+    projectContext?: string
+) => {
     const toolkitSlug = await resolveToolkitSlug(toolkitName);
-    const session = await createComposioSession(userId);
+    const session = await createComposioSession(userId, projectContext);
     const connectionRequest = await session.authorize(toolkitSlug, {
         callbackUrl: redirectUrl || DEFAULT_CONNECT_CALLBACK,
     });
@@ -84,10 +106,11 @@ export const getAuthorizationUrl = async (userId: string, toolkitName: string, r
 /**
  * List all active connections for a user.
  */
-export const listUserConnections = async (userId: string) => {
+export const listUserConnections = async (userId: string, projectContext?: string) => {
     const composio = getComposioInstance();
+    const scopedUserId = buildScopedComposioUserId(userId, projectContext);
     const response = await composio.connectedAccounts.list({
-        userIds: [userId],
+        userIds: [scopedUserId],
     });
 
     return response.items;
@@ -96,10 +119,16 @@ export const listUserConnections = async (userId: string) => {
 /**
  * Execute a specific Composio tool action.
  */
-export const executeAppAction = async (userId: string, actionName: string, parameters: Record<string, any>) => {
+export const executeAppAction = async (
+    userId: string,
+    actionName: string,
+    parameters: Record<string, any>,
+    projectContext?: string
+) => {
     const composio = getComposioInstance();
+    const scopedUserId = buildScopedComposioUserId(userId, projectContext);
     const result = await composio.tools.execute(actionName, {
-        userId,
+        userId: scopedUserId,
         arguments: parameters,
         dangerouslySkipVersionCheck: true,
     });

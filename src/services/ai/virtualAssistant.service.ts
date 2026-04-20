@@ -62,10 +62,14 @@ export const chatWithAssistant = async (
         }
 
         const composio = composioService.getComposioInstance();
-        const session = await composioService.createComposioSession(userId);
+        const scopedComposioUserId = composioService.buildScopedComposioUserId(
+            userId,
+            projectContext
+        );
+        const session = await composioService.createComposioSession(userId, projectContext);
 
         const [toolState, tools] = await Promise.all([
-            session.toolkits({ limit: 100 }),
+            session.toolkits({ limit: 50 }),
             session.tools(),
         ]);
 
@@ -111,7 +115,10 @@ export const chatWithAssistant = async (
                 }
             });
 
-            const toolResults = await (composio.provider as any).handleToolCalls(userId, response);
+            const toolResults = await (composio.provider as any).handleToolCalls(
+                scopedComposioUserId,
+                response
+            );
 
             conversation.push(response.choices[0].message as any);
 

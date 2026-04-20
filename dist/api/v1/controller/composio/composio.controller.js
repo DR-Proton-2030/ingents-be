@@ -38,12 +38,16 @@ const composioService = __importStar(require("../../../../services/composio/comp
  * Get all available apps and the user's connection status for each.
  */
 const getIntegrations = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         const userId = req.user._id.toString();
+        const projectContext = typeof ((_a = req.query) === null || _a === void 0 ? void 0 : _a.projectContext) === "string"
+            ? req.query.projectContext
+            : undefined;
         // Parallel fetch for speed
         const [availableApps, userConnections] = yield Promise.all([
             composioService.listAvailableApps(),
-            composioService.listUserConnections(userId)
+            composioService.listUserConnections(userId, projectContext)
         ]);
         const activeConnectionsByToolkit = new Map();
         userConnections.forEach((connection) => {
@@ -93,14 +97,14 @@ exports.getIntegrations = getIntegrations;
 const initiateConnection = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = req.user._id.toString();
-        const { toolkitName, redirectUrl } = req.body;
+        const { toolkitName, redirectUrl, projectContext } = req.body;
         if (!toolkitName) {
             return res.status(400).json({
                 success: false,
                 message: "toolkitName is required"
             });
         }
-        const authUrl = yield composioService.getAuthorizationUrl(userId, toolkitName, redirectUrl);
+        const authUrl = yield composioService.getAuthorizationUrl(userId, toolkitName, redirectUrl, typeof projectContext === "string" ? projectContext : undefined);
         return res.status(200).json({
             success: true,
             data: { authUrl }
@@ -122,14 +126,14 @@ exports.initiateConnection = initiateConnection;
 const executeAction = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = req.user._id.toString();
-        const { actionName, parameters } = req.body;
+        const { actionName, parameters, projectContext } = req.body;
         if (!actionName) {
             return res.status(400).json({
                 success: false,
                 message: "actionName is required"
             });
         }
-        const result = yield composioService.executeAppAction(userId, actionName, parameters || {});
+        const result = yield composioService.executeAppAction(userId, actionName, parameters || {}, typeof projectContext === "string" ? projectContext : undefined);
         return res.status(200).json({
             success: true,
             data: result

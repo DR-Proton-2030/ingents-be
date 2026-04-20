@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listAvailableApps = exports.executeAppAction = exports.listUserConnections = exports.getAuthorizationUrl = exports.createComposioSession = exports.getComposioInstance = void 0;
+exports.listAvailableApps = exports.executeAppAction = exports.listUserConnections = exports.getAuthorizationUrl = exports.createComposioSession = exports.getComposioInstance = exports.buildScopedComposioUserId = void 0;
 const core_1 = require("@composio/core");
 const config_1 = require("../../config/config");
 let composioInstance;
@@ -21,12 +21,23 @@ const TOOLKIT_ALIAS_MAP = {
     google_calendar: "googlecalendar",
 };
 const DEFAULT_CONNECT_CALLBACK = `${config_1.FRONTEND_URL || "http://localhost:3000"}/dashboard/project-management`;
+const PROJECT_SCOPE_SEPARATOR = "__project__";
 const ensureComposioApiKey = () => {
     if (!config_1.COMPOSIO_API_KEY) {
         throw new Error("COMPOSIO_API_KEY is not defined in environment variables.");
     }
 };
 const normalizeToolkitName = (toolkitName) => toolkitName.trim().toLowerCase();
+const sanitizeScopeSegment = (value) => value.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+const buildScopedComposioUserId = (userId, projectContext) => {
+    const normalizedUserId = sanitizeScopeSegment(userId);
+    if (!projectContext || !projectContext.trim()) {
+        return normalizedUserId;
+    }
+    const normalizedProject = sanitizeScopeSegment(projectContext);
+    return `${normalizedUserId}${PROJECT_SCOPE_SEPARATOR}${normalizedProject}`;
+};
+exports.buildScopedComposioUserId = buildScopedComposioUserId;
 const getComposioInstance = () => {
     if (!composioInstance) {
         ensureComposioApiKey();
@@ -37,9 +48,10 @@ const getComposioInstance = () => {
     return composioInstance;
 };
 exports.getComposioInstance = getComposioInstance;
-const createComposioSession = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+const createComposioSession = (userId, projectContext) => __awaiter(void 0, void 0, void 0, function* () {
     const composio = (0, exports.getComposioInstance)();
-    return composio.create(userId, {
+    const scopedUserId = (0, exports.buildScopedComposioUserId)(userId, projectContext);
+    return composio.create(scopedUserId, {
         manageConnections: true,
     });
 });
@@ -62,9 +74,9 @@ const resolveToolkitSlug = (toolkitName) => __awaiter(void 0, void 0, void 0, fu
 /**
  * Generate a connect link URL for a user to authorize a toolkit.
  */
-const getAuthorizationUrl = (userId, toolkitName, redirectUrl) => __awaiter(void 0, void 0, void 0, function* () {
+const getAuthorizationUrl = (userId, toolkitName, redirectUrl, projectContext) => __awaiter(void 0, void 0, void 0, function* () {
     const toolkitSlug = yield resolveToolkitSlug(toolkitName);
-    const session = yield (0, exports.createComposioSession)(userId);
+    const session = yield (0, exports.createComposioSession)(userId, projectContext);
     const connectionRequest = yield session.authorize(toolkitSlug, {
         callbackUrl: redirectUrl || DEFAULT_CONNECT_CALLBACK,
     });
@@ -77,10 +89,11 @@ exports.getAuthorizationUrl = getAuthorizationUrl;
 /**
  * List all active connections for a user.
  */
-const listUserConnections = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+const listUserConnections = (userId, projectContext) => __awaiter(void 0, void 0, void 0, function* () {
     const composio = (0, exports.getComposioInstance)();
+    const scopedUserId = (0, exports.buildScopedComposioUserId)(userId, projectContext);
     const response = yield composio.connectedAccounts.list({
-        userIds: [userId],
+        userIds: [scopedUserId],
     });
     return response.items;
 });
@@ -88,10 +101,11 @@ exports.listUserConnections = listUserConnections;
 /**
  * Execute a specific Composio tool action.
  */
-const executeAppAction = (userId, actionName, parameters) => __awaiter(void 0, void 0, void 0, function* () {
+const executeAppAction = (userId, actionName, parameters, projectContext) => __awaiter(void 0, void 0, void 0, function* () {
     const composio = (0, exports.getComposioInstance)();
+    const scopedUserId = (0, exports.buildScopedComposioUserId)(userId, projectContext);
     const result = yield composio.tools.execute(actionName, {
-        userId,
+        userId: scopedUserId,
         arguments: parameters,
         dangerouslySkipVersionCheck: true,
     });
