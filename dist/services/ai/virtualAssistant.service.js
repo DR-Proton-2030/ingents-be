@@ -43,6 +43,7 @@ const openai = new openai_1.default({
     apiKey: config_1.OPEN_AI_API_KEY,
 });
 const MAX_TOOL_ROUNDS = 6;
+const NON_EXECUTION_TOOL_PREFIXES = ["COMPOSIO_SEARCH_", "COMPOSIO_MANAGE_"];
 const sanitizeMessages = (messages) => {
     if (!Array.isArray(messages))
         return [];
@@ -73,6 +74,7 @@ const buildSystemPrompt = (connectedApps, projectContext) => {
         "Keep replies concise, clear, and action-focused.",
     ].join(" ");
 };
+const isActionableTool = (toolName) => !NON_EXECUTION_TOOL_PREFIXES.some((prefix) => toolName.startsWith(prefix));
 /**
  * Handle a chat request with the Virtual Assistant.
  * It uses OpenAI for reasoning and Composio for tool execution.
@@ -144,10 +146,13 @@ const chatWithAssistant = (userId, messages, projectContext) => __awaiter(void 0
         }
         const assistantMessage = ((_e = (_d = response.choices[0]) === null || _d === void 0 ? void 0 : _d.message) === null || _e === void 0 ? void 0 : _e.content) ||
             "I could not generate a response. Please try again.";
+        const usedToolsList = Array.from(usedTools);
+        const actionableTools = usedToolsList.filter(isActionableTool);
         return {
             message: assistantMessage,
-            requiresAction: usedTools.size > 0,
-            usedTools: Array.from(usedTools),
+            requiresAction: actionableTools.length > 0,
+            usedTools: usedToolsList,
+            actionableTools,
             connectedApps,
         };
     }

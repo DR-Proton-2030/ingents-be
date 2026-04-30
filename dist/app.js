@@ -38,6 +38,7 @@ const insightsSync_service_1 = require("./services/insights/insightsSync.service
 const subscription_worker_1 = require("./services/subscription/subscription.worker");
 const composio_routes_1 = __importDefault(require("./api/v1/routes/composio/composio.routes"));
 const virtualAssistant_routes_1 = __importDefault(require("./api/v1/routes/virtualAssistant/virtualAssistant.routes"));
+const automation_routes_1 = __importDefault(require("./api/v1/routes/automation/automation.routes"));
 const app = (0, express_1.default)();
 app.use(ipTracker_middleware_1.default);
 app.use(httpLogger_middleware_1.default);
@@ -91,6 +92,7 @@ app.use("/api/v1/campaign", campaign_routes_1.default);
 app.use("/api/v1/subscription", subscription_routes_1.default);
 app.use("/api/v1/integrations", composio_routes_1.default);
 app.use("/api/v1/virtual-assistant", virtualAssistant_routes_1.default);
+app.use("/api/v1/automation", automation_routes_1.default);
 // Initialize BullMQ Worker for Social Media Scheduler (async, non-blocking)
 (0, scheduler_service_1.initializeWorker)()
     .then((worker) => {
