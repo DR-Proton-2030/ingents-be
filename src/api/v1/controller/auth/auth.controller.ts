@@ -141,7 +141,7 @@ export const signIn = async (req: Request, res: Response) => {
       });
     }
 
-    // 🔴 IMPORTANT: password not set (invited user)
+    // 🔴 IMPORTANT: password not set (legacy invited user)
     if (!user.password) {
       return res.status(400).json({
         message: "Please set your password first",
@@ -183,8 +183,12 @@ export const signIn = async (req: Request, res: Response) => {
     });
 
     // 6️⃣ Response
+    const shouldResetPassword = !user.has_joined;
     return res.status(200).json({
-      message: "User logged in successfully",
+      message: shouldResetPassword
+        ? "Temporary password accepted"
+        : "User logged in successfully",
+      code: shouldResetPassword ? "PASSWORD_RESET_REQUIRED" : undefined,
       data: {
         user: {
           ...userObj,
@@ -270,7 +274,7 @@ export const setupPassword = async (req: Request, res: Response) => {
       $set: { password: hashedPassword, has_joined: true },
     });
     return res.status(200).json({
-      message: "Password setup successfully for all users in the company",
+      message: "Password reset successfully",
     });
   } catch (error) {
     console.error("Error setting up password:", error);

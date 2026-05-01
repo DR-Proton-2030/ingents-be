@@ -4,8 +4,7 @@ import AttendanceModel from "../../../../models/attendance/attendance.model";
 import { IUser } from "../../../../types/interface/user.interface";
 import generateToken from "../../../../services/generateToken/generateToken.service";
 import { ItokenPayload } from "../../../../types/interface/tokenPayload.interface";
-import { FRONTEND_URL } from "../../../../config/config";
-import { callMailServer } from "../../../../services/callMailServer/callMailServer";
+import { hashPassword } from "../../../../services/passwordControl/hashPassword";
 
 export const markAttendance = async (req: Request, res: Response) => {
   try {
@@ -146,8 +145,6 @@ export const getAttendanceStats = async (req: Request, res: Response) => {
   }
 };
 
-import { hashPassword } from "../../../../services/passwordControl/hashPassword";
-
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { userId, ...payload } = req.body;
@@ -204,7 +201,7 @@ export const updateUser = async (req: Request, res: Response) => {
 
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { email, role, full_name } = req.body;
+    const { email, role, full_name, password } = req.body;
     const { company_object_id } = req.user;
 
     if (!company_object_id) {
@@ -223,26 +220,10 @@ export const createUser = async (req: Request, res: Response) => {
       full_name,
       has_joined: false,
       company_object_id,
+      ...(password ? { password: await hashPassword(password) } : {}),
     }
 
     const userInstance = await new UserModel(userPayload).save();
-
-    const tokenPayload : ItokenPayload = {
-      _id: userInstance._id.toString(),
-      role,
-      company_object_id: company_object_id.toString(),
-      full_name: userInstance.full_name,
-    }
-
-    const token = generateToken(tokenPayload);
-
-    const resetUrl = `${FRONTEND_URL}/setup-password?token=${token}`;
-
-    await callMailServer("invite-user", {
-      email,
-      user_name: full_name || "User",
-      password_setup_url: resetUrl
-    })
 
     return res.status(200).json({
       message: "Client user created successfully",
