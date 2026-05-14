@@ -38,7 +38,7 @@ export class LLMWithRagService {
       prompt,
       systemMessage,
       ragData,
-      model: "gemini-1.5-flash",
+      model: "gemini-flash-lite-latest",
       maxTokens: 1000,
       temperature: 0.7
     });

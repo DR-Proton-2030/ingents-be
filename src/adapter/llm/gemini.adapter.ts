@@ -159,7 +159,7 @@ export class GeminiAdapter {
 				prompt,
 				systemMessage,
 				ragData,
-				model = "gemini-1.5-flash",
+				model = "gemini-flash-lite-latest",
 				maxTokens = 500,
 				temperature = 0.7
 			} = config;
@@ -192,8 +192,10 @@ export class GeminiAdapter {
 				content,
 				ragData,
 			};
-		} catch (error) {
-			console.error("Gemini text generation failed:", error);
+		} catch (error: any) {
+			const status = error.status || error.response?.status;
+			const message = error.message || "Unknown Gemini Error";
+			console.error(`\x1b[31m[GeminiAdapter] Text generation failed (Status: ${status}):\x1b[0m`, message);
 			throw error;
 		}
 	}
