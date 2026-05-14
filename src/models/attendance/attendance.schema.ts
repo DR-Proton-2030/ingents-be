@@ -5,7 +5,7 @@ import { IAttendance } from "../../types/interface/attendance.interface";
 
 const attendanceSchema: Schema<IAttendance> = new Schema<IAttendance>(
   {
-    user_object_id: SCHEMA_DEFINITION_PROPERTY.requiredObjectId,
+    user_object_id: { ...SCHEMA_DEFINITION_PROPERTY.requiredObjectId, ref: "users" },
     company_object_id: SCHEMA_DEFINITION_PROPERTY.requiredObjectId,
     date: SCHEMA_DEFINITION_PROPERTY.requiredString,
   },
