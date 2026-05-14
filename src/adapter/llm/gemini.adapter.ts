@@ -186,11 +186,18 @@ export class GeminiAdapter {
 
 			const content = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
+			const usageMetadata = result.usageMetadata;
+
 			return {
 				prompt: enhancedPrompt,
 				originalPrompt: prompt,
 				content,
 				ragData,
+				usage: {
+					promptTokens: usageMetadata?.promptTokenCount || 0,
+					completionTokens: usageMetadata?.candidatesTokenCount || 0,
+					totalTokens: usageMetadata?.totalTokenCount || 0
+				}
 			};
 		} catch (error: any) {
 			const status = error.status || error.response?.status;

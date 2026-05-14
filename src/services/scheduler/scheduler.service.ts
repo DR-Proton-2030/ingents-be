@@ -14,6 +14,7 @@ import { Types } from "mongoose";
 import { SocialMediaJobData } from "../../types/interface/socialMediaJob.interface";
 import { sendWhatsappMessage } from "../whatsapp/whatsapp.service";
 import { LLMWithRagService } from "../llmWithRag/llmWithRag.service";
+import AITokenUsageModel from "../../models/aiTokenUsage/aiTokenUsage.model";
 
 const llmService = new LLMWithRagService();
 
@@ -330,6 +331,17 @@ export const processPostJob = async (job: Job<SocialMediaJobData>): Promise<any>
           console.log(`[Scheduler] AI Content generated successfully.`);
           // Update campaign with generated content so it's visible in UI
           await CampaignModel.findByIdAndUpdate(campaign._id, { message_content: finalContent });
+
+          if (result.usage) {
+            await AITokenUsageModel.create({
+              company_object_id: campaign.company_object_id,
+              user_object_id: campaign.created_by_user_object_id,
+              feature: "campaign_generation",
+              tokens_used: result.usage.totalTokens,
+              prompt_tokens: result.usage.promptTokens,
+              completion_tokens: result.usage.completionTokens,
+            });
+          }
         } else {
            console.warn(`[Scheduler] AI returned empty content for campaign ${campaign._id}`);
         }

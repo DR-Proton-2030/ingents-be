@@ -96,8 +96,10 @@ app.use("/api/v1/campaign", campaignRouter);
 app.use("/api/v1/subscription", subscriptionRouter);
 app.use("/api/v1/integrations", composioRouter);
 app.use("/api/v1/virtual-assistant", virtualAssistantRouter);
-app.use("/api/v1/automation", automationRouter);
+import aiTokenUsageRouter from "./api/v1/routes/aiTokenUsage/aiTokenUsage.routes";
 
+app.use("/api/v1/automation", automationRouter);
+app.use("/api/v1/ai-token-usage", aiTokenUsageRouter);
 // Initialize BullMQ Worker for Social Media Scheduler (async, non-blocking)
 initializeWorker()
   .then((worker) => {
