@@ -328,7 +328,7 @@ export const processPostJob = async (job: Job<SocialMediaJobData>): Promise<any>
 
         if (result && result.content) {
           finalContent = result.content;
-          console.log(`[Scheduler] AI Content generated successfully.`);
+          console.log(`[Scheduler] AI Content generated successfully.`, result);
           // Update campaign with generated content so it's visible in UI
           await CampaignModel.findByIdAndUpdate(campaign._id, { message_content: finalContent });
 
@@ -343,12 +343,12 @@ export const processPostJob = async (job: Job<SocialMediaJobData>): Promise<any>
             });
           }
         } else {
-           console.warn(`[Scheduler] AI returned empty content for campaign ${campaign._id}`);
+          console.warn(`[Scheduler] AI returned empty content for campaign ${campaign._id}`);
         }
       } catch (err: any) {
         const errorDetail = err.response?.data?.error || err;
         console.error(`\x1b[31m[Scheduler] AI generation failed for campaign ${campaign._id}:\x1b[0m`, JSON.stringify(errorDetail, null, 2));
-        
+
         if (err.message?.includes("SERVICE_DISABLED") || JSON.stringify(errorDetail).includes("SERVICE_DISABLED")) {
           console.error(`\x1b[33m[CRITICAL] Gemini API is not enabled. Please enable it at: https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=589284612267\x1b[0m`);
         }
