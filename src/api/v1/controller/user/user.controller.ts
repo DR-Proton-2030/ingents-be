@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { Types } from "mongoose";
 import UserModel from "../../../../models/users/users.model";
 import AttendanceModel from "../../../../models/attendance/attendance.model";
 import { IUser } from "../../../../types/interface/user.interface";
@@ -219,7 +220,7 @@ export const createUser = async (req: Request, res: Response) => {
       role,
       full_name,
       has_joined: false,
-      company_object_id,
+      company_object_id: new Types.ObjectId(company_object_id),
       ...(password ? { password: await hashPassword(password) } : {}),
     }
 

@@ -15,35 +15,47 @@ import {
 } from "../../../../types/interface/subscription.interface";
 
 /**
- * GET /subscription/current - Get current user's subscription
+ * Helper: get or create the single subscription doc for a company.
+ * Lets Mongoose handle ObjectId casting via the schema definition.
+ */
+async function getOrCreateCompanySubscription(companyId: string) {
+  // First, try to find existing subscription
+  let sub = await SubscriptionModel.findOne({ company_id: companyId });
+  
+  if (sub) return sub;
+
+  // No subscription exists — create one
+  const now = new Date();
+  const periodEnd = new Date(now);
+  periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+  try {
+    sub = await SubscriptionModel.create({
+      company_id: companyId,
+      plan: "free",
+      status: "active",
+      amount: 0,
+      currency: "INR",
+      current_period_start: now,
+      current_period_end: periodEnd,
+    });
+    return sub;
+  } catch (err: any) {
+    // E11000 = another request created it first (race condition), just fetch it
+    if (err.code === 11000) {
+      return SubscriptionModel.findOne({ company_id: companyId });
+    }
+    throw err;
+  }
+}
+
+/**
+ * GET /subscription/current - Get the organization's subscription
  */
 export const getCurrentSubscription = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user._id;
-
-    let subscription = await SubscriptionModel.findOne({
-      user_id: userId,
-      status: { $in: ["active", "past_due"] },
-    }).sort({ createdAt: -1 });
-
-    // If no subscription, auto-create a free plan
-    if (!subscription) {
-      const now = new Date();
-      const periodEnd = new Date(now);
-      periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-      subscription = await SubscriptionModel.create({
-        user_id: userId,
-        company_id: (req as any).user.company_object_id,
-        plan: "free",
-        status: "active",
-        amount: 0,
-        currency: "INR",
-        current_period_start: now,
-        current_period_end: periodEnd,
-      });
-    }
-
+    const companyId = (req as any).user.company_object_id;
+    const subscription = await getOrCreateCompanySubscription(companyId);
     res.status(200).json({ success: true, data: subscription });
   } catch (error: any) {
     console.error("getCurrentSubscription error:", error);
@@ -57,6 +69,7 @@ export const getCurrentSubscription = async (req: Request, res: Response) => {
 export const createSubscriptionOrder = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user._id;
+    const companyId = (req as any).user.company_object_id;
     const { plan } = req.body as { plan: SubscriptionPlan };
 
     if (!plan || !PLAN_CONFIG[plan]) {
@@ -71,45 +84,28 @@ export const createSubscriptionOrder = async (req: Request, res: Response) => {
       return;
     }
 
-    const shortId = userId.toString().slice(-8);
+    const shortId = companyId.toString().slice(-8);
     const receipt = `sub_${shortId}_${Date.now().toString(36)}`;
 
     const order = await createRazorpayOrder(
       planConfig.price,
       "INR",
       receipt,
-      {
-        user_id: userId.toString(),
-        plan,
-      }
+      { company_id: companyId.toString(), plan }
     );
 
-    // Find or create subscription
-    let subscription = await SubscriptionModel.findOne({
-      user_id: userId,
-      status: { $in: ["active", "past_due"] },
-    });
+    // Ensure subscription doc exists
+    const subscription = await getOrCreateCompanySubscription(companyId);
 
     if (!subscription) {
-      const now = new Date();
-      const periodEnd = new Date(now);
-      periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-      subscription = await SubscriptionModel.create({
-        user_id: userId,
-        company_id: (req as any).user.company_object_id,
-        plan: "free",
-        status: "active",
-        amount: 0,
-        currency: "INR",
-        current_period_start: now,
-        current_period_end: periodEnd,
-      });
+      res.status(500).json({ success: false, message: "Failed to initialize subscription" });
+      return;
     }
 
     // Create payment record
     const payment = await PaymentModel.create({
       user_id: userId,
+      company_id: companyId,
       subscription_id: subscription._id,
       razorpay_order_id: order.id,
       amount: planConfig.price,
@@ -142,7 +138,7 @@ export const createSubscriptionOrder = async (req: Request, res: Response) => {
  */
 export const verifyPayment = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user._id;
+    const companyId = (req as any).user.company_object_id;
     const {
       razorpay_order_id,
       razorpay_payment_id,
@@ -163,13 +159,9 @@ export const verifyPayment = async (req: Request, res: Response) => {
     );
 
     if (!isValid) {
-      // Update payment as failed
       await PaymentModel.findOneAndUpdate(
         { razorpay_order_id },
-        {
-          status: "failed",
-          failure_reason: "Signature verification failed",
-        }
+        { status: "failed", failure_reason: "Signature verification failed" }
       );
       res.status(400).json({ success: false, message: "Payment verification failed" });
       return;
@@ -192,13 +184,13 @@ export const verifyPayment = async (req: Request, res: Response) => {
       return;
     }
 
-    // Update subscription
+    // Update the single company subscription doc
     const now = new Date();
     const periodEnd = new Date(now);
     periodEnd.setMonth(periodEnd.getMonth() + 1);
 
     const subscription = await SubscriptionModel.findOneAndUpdate(
-      { user_id: userId, status: { $in: ["active", "past_due"] } },
+      { company_id: companyId },
       {
         plan: plan as SubscriptionPlan,
         status: "active",
@@ -208,10 +200,10 @@ export const verifyPayment = async (req: Request, res: Response) => {
         cancel_at_period_end: false,
         cancelled_at: null,
       },
-      { new: true }
+      { new: true, upsert: true }
     );
 
-    // Schedule auto-renewal via BullMQ
+    // Schedule auto-renewal
     if (subscription) {
       try {
         await scheduleRenewal(subscription._id.toString(), periodEnd);
@@ -236,10 +228,10 @@ export const verifyPayment = async (req: Request, res: Response) => {
  */
 export const cancelSubscription = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user._id;
+    const companyId = (req as any).user.company_object_id;
 
     const subscription = await SubscriptionModel.findOne({
-      user_id: userId,
+      company_id: companyId,
       status: "active",
     });
 
@@ -253,11 +245,9 @@ export const cancelSubscription = async (req: Request, res: Response) => {
       return;
     }
 
-    // Mark for cancellation at period end
     subscription.cancel_at_period_end = true;
     await subscription.save();
 
-    // Schedule actual cancellation (downgrade to free)
     try {
       await scheduleCancellation(
         subscription._id.toString(),
@@ -283,14 +273,14 @@ export const cancelSubscription = async (req: Request, res: Response) => {
  */
 export const downgradeToFree = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user._id;
+    const companyId = (req as any).user.company_object_id;
 
     const now = new Date();
     const periodEnd = new Date(now);
     periodEnd.setMonth(periodEnd.getMonth() + 1);
 
     const subscription = await SubscriptionModel.findOneAndUpdate(
-      { user_id: userId, status: { $in: ["active", "past_due"] } },
+      { company_id: companyId },
       {
         plan: "free",
         status: "active",
@@ -315,13 +305,13 @@ export const downgradeToFree = async (req: Request, res: Response) => {
 };
 
 /**
- * GET /subscription/payments - Get payment history
+ * GET /subscription/payments - Get payment history for the organization
  */
 export const getPaymentHistory = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user._id;
+    const companyId = (req as any).user.company_object_id;
 
-    const payments = await PaymentModel.find({ user_id: userId })
+    const payments = await PaymentModel.find({ company_id: companyId })
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();

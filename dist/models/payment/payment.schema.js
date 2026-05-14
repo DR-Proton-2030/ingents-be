@@ -4,6 +4,7 @@ const mongoose_1 = require("mongoose");
 const schemaOption_1 = require("../../constants/model/schemaOption");
 const paymentSchema = new mongoose_1.Schema({
     user_id: { type: mongoose_1.Schema.Types.ObjectId, ref: "users", required: true },
+    company_id: { type: mongoose_1.Schema.Types.ObjectId, ref: "companies", required: true },
     subscription_id: { type: mongoose_1.Schema.Types.ObjectId, ref: "subscriptions", required: true },
     razorpay_order_id: { type: String, required: true },
     razorpay_payment_id: { type: String, default: null },

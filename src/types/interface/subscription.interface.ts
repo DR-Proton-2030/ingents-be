@@ -5,7 +5,6 @@ export type SubscriptionStatus = "active" | "cancelled" | "expired" | "past_due"
 export type PaymentStatus = "created" | "captured" | "failed" | "refunded";
 
 export interface ISubscription {
-  user_id: Types.ObjectId;
   company_id: Types.ObjectId;
   plan: SubscriptionPlan;
   status: SubscriptionStatus;
@@ -23,6 +22,7 @@ export interface ISubscription {
 
 export interface IPayment {
   user_id: Types.ObjectId;
+  company_id: Types.ObjectId;
   subscription_id: Types.ObjectId;
   razorpay_order_id: string;
   razorpay_payment_id?: string;

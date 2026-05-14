@@ -4,7 +4,6 @@ import { ISubscription } from "../../types/interface/subscription.interface";
 
 const subscriptionSchema: Schema<ISubscription> = new Schema<ISubscription>(
   {
-    user_id: { type: Schema.Types.ObjectId, ref: "users", required: true },
     company_id: { type: Schema.Types.ObjectId, ref: "companies", required: true },
     plan: {
       type: String,
@@ -36,7 +35,7 @@ const subscriptionSchema: Schema<ISubscription> = new Schema<ISubscription>(
   }
 );
 
-// One active subscription per user
-subscriptionSchema.index({ user_id: 1, status: 1 });
+// One subscription per company — this is the key constraint
+subscriptionSchema.index({ company_id: 1 }, { unique: true });
 
 export default subscriptionSchema;

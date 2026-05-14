@@ -27,6 +27,13 @@ const postToX_1 = require("../x/postToX");
 const mongoose_1 = require("mongoose");
 const whatsapp_service_1 = require("../whatsapp/whatsapp.service");
 const llmWithRag_service_1 = require("../llmWithRag/llmWithRag.service");
+const aiTokenUsage_model_1 = __importDefault(require("../../models/aiTokenUsage/aiTokenUsage.model"));
+const subscription_model_1 = __importDefault(require("../../models/subscription/subscription.model"));
+const PLAN_LIMITS = {
+    free: 1000,
+    pro: 3000,
+    pro_plus: 10000,
+};
 const llmService = new llmWithRag_service_1.LLMWithRagService();
 // Track if Redis is available
 let isRedisAvailable = false;
@@ -244,7 +251,7 @@ const getPostedContent = (userId, platform, limit) => __awaiter(void 0, void 0, 
 exports.getPostedContent = getPostedContent;
 // Process the job - called by worker
 const processPostJob = (job) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     if (job.name === "campaign-trigger") {
         const triggerData = job.data;
         const campaign = yield campaign_model_1.default.findById(triggerData.campaignId);
@@ -258,19 +265,59 @@ const processPostJob = (job) => __awaiter(void 0, void 0, void 0, function* () {
         if (campaign.use_ai_generation && campaign.ai_context) {
             console.log(`[Scheduler] Generating AI content for campaign ${campaign._id}...`);
             try {
+                // 1. Check organization-wide AI limits
+                const subscription = yield subscription_model_1.default.findOne({
+                    company_id: campaign.company_object_id,
+                    status: { $in: ["active", "past_due"] },
+                }).sort({ amount: -1, createdAt: -1 });
+                const plan = (subscription === null || subscription === void 0 ? void 0 : subscription.plan) || "free";
+                const limit = PLAN_LIMITS[plan] || 1000;
+                const usage = yield aiTokenUsage_model_1.default.aggregate([
+                    { $match: { company_object_id: new mongoose_1.Types.ObjectId(campaign.company_object_id) } },
+                    { $group: { _id: null, total: { $sum: "$tokens_used" } } },
+                ]);
+                const totalUsed = usage.length > 0 ? usage[0].total : 0;
+                if (totalUsed >= limit) {
+                    console.warn(`[Scheduler] AI limit reached for company ${campaign.company_object_id}. Skipping generation.`);
+                    // Optionally notify user or mark campaign as paused
+                    return { success: false, message: "AI credit limit reached." };
+                }
                 // Use Gemini for high quality generative content
                 const result = yield llmService.generateGeminiResponseWithRag(`Generate a professional and engaging social media post based on this brief: "${campaign.ai_context}". Only return the post content text.`, "You are a creative social media manager expert at writing viral and engaging posts.");
-                if (result && result.text) {
-                    finalContent = result.text;
-                    console.log(`[Scheduler] AI Content generated successfully.`);
+                if (result && result.content) {
+                    finalContent = result.content;
+                    console.log(`[Scheduler] AI Content generated successfully.`, result);
+                    // Update campaign with generated content so it's visible in UI
+                    yield campaign_model_1.default.findByIdAndUpdate(campaign._id, { message_content: finalContent });
+                    if (result.usage) {
+                        yield aiTokenUsage_model_1.default.create({
+                            company_object_id: campaign.company_object_id,
+                            user_object_id: campaign.created_by_user_object_id,
+                            feature: "campaign_generation",
+                            tokens_used: result.usage.totalTokens,
+                            prompt_tokens: result.usage.promptTokens,
+                            completion_tokens: result.usage.completionTokens,
+                        });
+                    }
+                }
+                else {
+                    console.warn(`[Scheduler] AI returned empty content for campaign ${campaign._id}`);
                 }
             }
             catch (err) {
-                console.error("[Scheduler] AI generation failed, falling back to static content.", err);
+                const errorDetail = ((_b = (_a = err.response) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.error) || err;
+                console.error(`\x1b[31m[Scheduler] AI generation failed for campaign ${campaign._id}:\x1b[0m`, JSON.stringify(errorDetail, null, 2));
+                if (((_c = err.message) === null || _c === void 0 ? void 0 : _c.includes("SERVICE_DISABLED")) || JSON.stringify(errorDetail).includes("SERVICE_DISABLED")) {
+                    console.error(`\x1b[33m[CRITICAL] Gemini API is not enabled. Please enable it at: https://console.developers.google.com/apis/api/generativelanguage.googleapis.com/overview?project=589284612267\x1b[0m`);
+                }
             }
         }
+        if (!finalContent || finalContent.trim() === "") {
+            console.error(`\x1b[31m[Scheduler] Campaign ${campaign._id} ("${campaign.name}") has no message content. Aborting trigger.\x1b[0m`);
+            return { success: false, message: "Campaign content is empty. Generation might have failed." };
+        }
         if (campaign.type === "whatsapp_messenger") {
-            if (!((_a = user.whatsapp) === null || _a === void 0 ? void 0 : _a.phone_number_id) || !((_b = user.whatsapp) === null || _b === void 0 ? void 0 : _b.access_token)) {
+            if (!((_d = user.whatsapp) === null || _d === void 0 ? void 0 : _d.phone_number_id) || !((_e = user.whatsapp) === null || _e === void 0 ? void 0 : _e.access_token)) {
                 return { message: "WhatsApp API credentials not found or disconnected." };
             }
             const targetNumbers = campaign.target_numbers || [];
@@ -289,13 +336,13 @@ const processPostJob = (job) => __awaiter(void 0, void 0, void 0, function* () {
         }
         // Social Broadcaster logic
         const platforms = [];
-        if (((_c = user.facebook) === null || _c === void 0 ? void 0 : _c.access_token) && ((_d = user.facebook) === null || _d === void 0 ? void 0 : _d.project_id))
+        if (((_f = user.facebook) === null || _f === void 0 ? void 0 : _f.access_token) && ((_g = user.facebook) === null || _g === void 0 ? void 0 : _g.project_id))
             platforms.push("facebook");
-        if ((_e = user.instagram) === null || _e === void 0 ? void 0 : _e.access_token)
+        if ((_h = user.instagram) === null || _h === void 0 ? void 0 : _h.access_token)
             platforms.push("instagram");
-        if ((_f = user.youtube) === null || _f === void 0 ? void 0 : _f.access_token)
+        if ((_j = user.youtube) === null || _j === void 0 ? void 0 : _j.access_token)
             platforms.push("youtube");
-        if ((_g = user.x) === null || _g === void 0 ? void 0 : _g.access_token)
+        if ((_k = user.x) === null || _k === void 0 ? void 0 : _k.access_token)
             platforms.push("x");
         console.log(`[Scheduler] Firing recurring campaign ${campaign._id} to platforms:`, platforms);
         for (const platform of platforms) {
@@ -308,7 +355,7 @@ const processPostJob = (job) => __awaiter(void 0, void 0, void 0, function* () {
                     media_type: "text",
                     hashtags: ["#campaign"],
                     scheduled_at: new Date(Date.now() + 5000), // Minor offset
-                    page_id: platform === "facebook" ? (_h = user.facebook) === null || _h === void 0 ? void 0 : _h.project_id : undefined,
+                    page_id: platform === "facebook" ? (_l = user.facebook) === null || _l === void 0 ? void 0 : _l.project_id : undefined,
                 });
             }
             catch (e) {
@@ -365,7 +412,7 @@ const processPostJob = (job) => __awaiter(void 0, void 0, void 0, function* () {
                     mediaUrls,
                     hashtags,
                 });
-                platformPostId = (_j = platformResponse === null || platformResponse === void 0 ? void 0 : platformResponse.data) === null || _j === void 0 ? void 0 : _j.id;
+                platformPostId = (_m = platformResponse === null || platformResponse === void 0 ? void 0 : platformResponse.data) === null || _m === void 0 ? void 0 : _m.id;
                 break;
             default:
                 throw new Error(`Unknown platform: ${platform}`);
@@ -382,7 +429,7 @@ const processPostJob = (job) => __awaiter(void 0, void 0, void 0, function* () {
             platform,
             content,
             media_urls: mediaUrls,
-            media_type: (mediaUrls === null || mediaUrls === void 0 ? void 0 : mediaUrls.length) ? (((_k = mediaUrls[0]) === null || _k === void 0 ? void 0 : _k.includes("video")) ? "video" : "image") : "text",
+            media_type: (mediaUrls === null || mediaUrls === void 0 ? void 0 : mediaUrls.length) ? (((_o = mediaUrls[0]) === null || _o === void 0 ? void 0 : _o.includes("video")) ? "video" : "image") : "text",
             hashtags,
             posted_at: new Date(),
             platform_post_id: platformPostId,
@@ -458,7 +505,12 @@ const initializeWorker = () => __awaiter(void 0, void 0, void 0, function* () {
                     console.error(`[Scheduler] QueueEvents Error: ${err.message}`);
                 });
                 const worker = new bullmq_1.Worker(redis_config_1.QUEUE_NAMES.SOCIAL_MEDIA_POST, (job) => __awaiter(void 0, void 0, void 0, function* () {
-                    console.log(`Processing job ${job.id} for platform ${job.data.platform}`);
+                    if (job.data.platform) {
+                        console.log(`Processing job ${job.id} for platform ${job.data.platform}`);
+                    }
+                    else {
+                        console.log(`Processing job ${job.id} (${job.name})`);
+                    }
                     return (0, exports.processPostJob)(job);
                 }), {
                     connection: redis_config_1.REDIS_CONFIG,

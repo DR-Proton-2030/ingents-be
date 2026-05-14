@@ -148,9 +148,9 @@ class GeminiAdapter {
     }
     generateText(config) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e;
+            var _a, _b, _c, _d, _e, _f;
             try {
-                const { prompt, systemMessage, ragData, model = "gemini-1.5-flash", maxTokens = 500, temperature = 0.7 } = config;
+                const { prompt, systemMessage, ragData, model = "gemini-flash-lite-latest", maxTokens = 500, temperature = 0.7 } = config;
                 // Enhance prompt with RAG context if available
                 let enhancedPrompt = prompt;
                 if (ragData) {
@@ -169,15 +169,23 @@ class GeminiAdapter {
                         }]
                 });
                 const content = ((_e = (_d = (_c = (_b = (_a = result.candidates) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.content) === null || _c === void 0 ? void 0 : _c.parts) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.text) || "";
+                const usageMetadata = result.usageMetadata;
                 return {
                     prompt: enhancedPrompt,
                     originalPrompt: prompt,
                     content,
                     ragData,
+                    usage: {
+                        promptTokens: (usageMetadata === null || usageMetadata === void 0 ? void 0 : usageMetadata.promptTokenCount) || 0,
+                        completionTokens: (usageMetadata === null || usageMetadata === void 0 ? void 0 : usageMetadata.candidatesTokenCount) || 0,
+                        totalTokens: (usageMetadata === null || usageMetadata === void 0 ? void 0 : usageMetadata.totalTokenCount) || 0
+                    }
                 };
             }
             catch (error) {
-                console.error("Gemini text generation failed:", error);
+                const status = error.status || ((_f = error.response) === null || _f === void 0 ? void 0 : _f.status);
+                const message = error.message || "Unknown Gemini Error";
+                console.error(`\x1b[31m[GeminiAdapter] Text generation failed (Status: ${status}):\x1b[0m`, message);
                 throw error;
             }
         });

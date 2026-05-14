@@ -119,7 +119,7 @@ const signIn = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 message: "User not found",
             });
         }
-        // 🔴 IMPORTANT: password not set (invited user)
+        // 🔴 IMPORTANT: password not set (legacy invited user)
         if (!user.password) {
             return res.status(400).json({
                 message: "Please set your password first",
@@ -148,8 +148,12 @@ const signIn = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         // 5️⃣ Set cookie (FIXED)
         res.cookie("token", token, Object.assign({ httpOnly: true, secure: config_1.NODE_ENV === "production", sameSite: config_1.NODE_ENV === "production" ? "none" : "strict", path: "/", maxAge: 7 * 24 * 60 * 60 * 1000 }, (config_1.NODE_ENV === "production" && { domain: ".ingents.ai" })));
         // 6️⃣ Response
+        const shouldResetPassword = !user.has_joined;
         return res.status(200).json({
-            message: "User logged in successfully",
+            message: shouldResetPassword
+                ? "Temporary password accepted"
+                : "User logged in successfully",
+            code: shouldResetPassword ? "PASSWORD_RESET_REQUIRED" : undefined,
             data: {
                 user: Object.assign(Object.assign({}, userObj), { has_joined: user.has_joined }),
             },
@@ -231,7 +235,7 @@ const setupPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             $set: { password: hashedPassword, has_joined: true },
         });
         return res.status(200).json({
-            message: "Password setup successfully for all users in the company",
+            message: "Password reset successfully",
         });
     }
     catch (error) {

@@ -15,6 +15,13 @@ import { SocialMediaJobData } from "../../types/interface/socialMediaJob.interfa
 import { sendWhatsappMessage } from "../whatsapp/whatsapp.service";
 import { LLMWithRagService } from "../llmWithRag/llmWithRag.service";
 import AITokenUsageModel from "../../models/aiTokenUsage/aiTokenUsage.model";
+import SubscriptionModel from "../../models/subscription/subscription.model";
+
+const PLAN_LIMITS: Record<string, number> = {
+  free: 1000,
+  pro: 3000,
+  pro_plus: 10000,
+};
 
 const llmService = new LLMWithRagService();
 
@@ -320,6 +327,28 @@ export const processPostJob = async (job: Job<SocialMediaJobData>): Promise<any>
     if (campaign.use_ai_generation && campaign.ai_context) {
       console.log(`[Scheduler] Generating AI content for campaign ${campaign._id}...`);
       try {
+        // 1. Check organization-wide AI limits
+        const subscription = await SubscriptionModel.findOne({
+          company_id: campaign.company_object_id,
+          status: { $in: ["active", "past_due"] },
+        }).sort({ amount: -1, createdAt: -1 });
+
+        const plan = subscription?.plan || "free";
+        const limit = PLAN_LIMITS[plan] || 1000;
+
+        const usage = await AITokenUsageModel.aggregate([
+          { $match: { company_object_id: new Types.ObjectId(campaign.company_object_id) } },
+          { $group: { _id: null, total: { $sum: "$tokens_used" } } },
+        ]);
+
+        const totalUsed = usage.length > 0 ? usage[0].total : 0;
+
+        if (totalUsed >= limit) {
+          console.warn(`[Scheduler] AI limit reached for company ${campaign.company_object_id}. Skipping generation.`);
+          // Optionally notify user or mark campaign as paused
+          return { success: false, message: "AI credit limit reached." };
+        }
+
         // Use Gemini for high quality generative content
         const result: any = await llmService.generateGeminiResponseWithRag(
           `Generate a professional and engaging social media post based on this brief: "${campaign.ai_context}". Only return the post content text.`,

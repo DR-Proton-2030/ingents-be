@@ -107,7 +107,8 @@ const processRenewal = (subscriptionId) => __awaiter(void 0, void 0, void 0, fun
         });
         // Create payment record
         yield payment_model_1.default.create({
-            user_id: subscription.user_id,
+            user_id: subscription.company_id, // billing tied to company
+            company_id: subscription.company_id,
             subscription_id: subscription._id,
             razorpay_order_id: order.id,
             amount: planConfig.price,

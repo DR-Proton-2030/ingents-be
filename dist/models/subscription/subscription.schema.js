@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = require("mongoose");
 const schemaOption_1 = require("../../constants/model/schemaOption");
 const subscriptionSchema = new mongoose_1.Schema({
-    user_id: { type: mongoose_1.Schema.Types.ObjectId, ref: "users", required: true },
     company_id: { type: mongoose_1.Schema.Types.ObjectId, ref: "companies", required: true },
     plan: {
         type: String,
@@ -28,6 +27,6 @@ const subscriptionSchema = new mongoose_1.Schema({
     trial_end: { type: Date, default: null },
     metadata: { type: mongoose_1.Schema.Types.Mixed, default: {} },
 }, Object.assign(Object.assign({}, schemaOption_1.GENERAL_SCHEMA_OPTIONS), { toJSON: { virtuals: true }, toObject: { virtuals: true } }));
-// One active subscription per user
-subscriptionSchema.index({ user_id: 1, status: 1 });
+// One subscription per company — this is the key constraint
+subscriptionSchema.index({ company_id: 1 }, { unique: true });
 exports.default = subscriptionSchema;

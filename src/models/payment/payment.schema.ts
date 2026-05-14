@@ -5,6 +5,7 @@ import { IPayment } from "../../types/interface/subscription.interface";
 const paymentSchema: Schema<IPayment> = new Schema<IPayment>(
   {
     user_id: { type: Schema.Types.ObjectId, ref: "users", required: true },
+    company_id: { type: Schema.Types.ObjectId, ref: "companies", required: true },
     subscription_id: { type: Schema.Types.ObjectId, ref: "subscriptions", required: true },
     razorpay_order_id: { type: String, required: true },
     razorpay_payment_id: { type: String, default: null },

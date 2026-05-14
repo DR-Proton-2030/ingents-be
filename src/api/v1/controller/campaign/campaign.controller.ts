@@ -32,8 +32,8 @@ export const createCampaign = async (req: Request, res: Response) => {
       ai_context,
       use_ai_generation: isAiEnabled,
       status: "active",
-      created_by_user_object_id: user_object_id,
-      company_object_id: company_object_id!,
+      created_by_user_object_id: new Types.ObjectId(user_object_id),
+      company_object_id: new Types.ObjectId(company_object_id!),
     };
 
     const newCampaign = await new CampaignModel(newCampaignPayload).save();

@@ -6,7 +6,7 @@ export interface IUser {
   email: string;
   password: string;
   emp_id: string;
-  company_object_id: SchemaDefinitionProperty<Types.ObjectId>;
+  company_object_id: Types.ObjectId;
   role: UserRole;
   profile_picture: string;
   has_joined: boolean;

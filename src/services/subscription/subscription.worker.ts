@@ -122,7 +122,8 @@ const processRenewal = async (subscriptionId: string) => {
 
     // Create payment record
     await PaymentModel.create({
-      user_id: subscription.user_id,
+      user_id: subscription.company_id, // billing tied to company
+      company_id: subscription.company_id,
       subscription_id: subscription._id,
       razorpay_order_id: order.id,
       amount: planConfig.price,

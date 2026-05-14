@@ -24,11 +24,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.searchUsers = exports.getUserById = exports.getUsers = exports.createUser = exports.updateUser = exports.getAttendanceStats = exports.checkAttendance = exports.markAttendance = void 0;
+const mongoose_1 = require("mongoose");
 const users_model_1 = __importDefault(require("../../../../models/users/users.model"));
 const attendance_model_1 = __importDefault(require("../../../../models/attendance/attendance.model"));
-const generateToken_service_1 = __importDefault(require("../../../../services/generateToken/generateToken.service"));
-const config_1 = require("../../../../config/config");
-const callMailServer_1 = require("../../../../services/callMailServer/callMailServer");
+const hashPassword_1 = require("../../../../services/passwordControl/hashPassword");
 const markAttendance = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user_id = req.user._id;
@@ -156,7 +155,6 @@ const getAttendanceStats = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.getAttendanceStats = getAttendanceStats;
-const hashPassword_1 = require("../../../../services/passwordControl/hashPassword");
 const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const _a = req.body, { userId } = _a, payload = __rest(_a, ["userId"]);
@@ -199,7 +197,7 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 exports.updateUser = updateUser;
 const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { email, role, full_name } = req.body;
+        const { email, role, full_name, password } = req.body;
         const { company_object_id } = req.user;
         if (!company_object_id) {
             return res.status(400).json({ message: "Company ID is required" });
@@ -209,27 +207,10 @@ const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             return res.status(400).json({
                 message: "User with this email already exists",
             });
-        const userPayload = {
-            email,
+        const userPayload = Object.assign({ email,
             role,
-            full_name,
-            has_joined: false,
-            company_object_id,
-        };
+            full_name, has_joined: false, company_object_id: new mongoose_1.Types.ObjectId(company_object_id) }, (password ? { password: yield (0, hashPassword_1.hashPassword)(password) } : {}));
         const userInstance = yield new users_model_1.default(userPayload).save();
-        const tokenPayload = {
-            _id: userInstance._id.toString(),
-            role,
-            company_object_id: company_object_id.toString(),
-            full_name: userInstance.full_name,
-        };
-        const token = (0, generateToken_service_1.default)(tokenPayload);
-        const resetUrl = `${config_1.FRONTEND_URL}/setup-password?token=${token}`;
-        yield (0, callMailServer_1.callMailServer)("invite-user", {
-            email,
-            user_name: full_name || "User",
-            password_setup_url: resetUrl
-        });
         return res.status(200).json({
             message: "Client user created successfully",
             data: userInstance,

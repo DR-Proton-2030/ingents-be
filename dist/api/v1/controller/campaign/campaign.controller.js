@@ -13,6 +13,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteCampaign = exports.updateCampaignStatus = exports.getCampaigns = exports.createCampaign = void 0;
+const mongoose_1 = require("mongoose");
 const campaign_model_1 = __importDefault(require("../../../../models/campaign/campaign.model"));
 const activityLog_service_1 = require("../../../../services/activityLog/activityLog.service");
 const scheduler_service_1 = require("../../../../services/scheduler/scheduler.service");
@@ -39,8 +40,8 @@ const createCampaign = (req, res) => __awaiter(void 0, void 0, void 0, function*
             ai_context,
             use_ai_generation: isAiEnabled,
             status: "active",
-            created_by_user_object_id: user_object_id,
-            company_object_id: company_object_id,
+            created_by_user_object_id: new mongoose_1.Types.ObjectId(user_object_id),
+            company_object_id: new mongoose_1.Types.ObjectId(company_object_id),
         };
         const newCampaign = yield new campaign_model_1.default(newCampaignPayload).save();
         // Dispatch to BullMQ based on Frequency

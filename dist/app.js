@@ -92,7 +92,11 @@ app.use("/api/v1/campaign", campaign_routes_1.default);
 app.use("/api/v1/subscription", subscription_routes_1.default);
 app.use("/api/v1/integrations", composio_routes_1.default);
 app.use("/api/v1/virtual-assistant", virtualAssistant_routes_1.default);
+const aiTokenUsage_routes_1 = __importDefault(require("./api/v1/routes/aiTokenUsage/aiTokenUsage.routes"));
+const ai_routes_1 = __importDefault(require("./api/v1/routes/ai/ai.routes"));
 app.use("/api/v1/automation", automation_routes_1.default);
+app.use("/api/v1/ai-token-usage", aiTokenUsage_routes_1.default);
+app.use("/api/v1/ai", ai_routes_1.default);
 // Initialize BullMQ Worker for Social Media Scheduler (async, non-blocking)
 (0, scheduler_service_1.initializeWorker)()
     .then((worker) => {

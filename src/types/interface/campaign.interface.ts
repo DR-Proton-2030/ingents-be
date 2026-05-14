@@ -14,8 +14,8 @@ export interface ICampaign {
   ai_context?: string;
   use_ai_generation?: boolean;
   status: "active" | "draft" | "paused" | "completed";
-  created_by_user_object_id: SchemaDefinitionProperty<Types.ObjectId>;
-  company_object_id: SchemaDefinitionProperty<Types.ObjectId>;
+  created_by_user_object_id: Types.ObjectId;
+  company_object_id: Types.ObjectId;
   created_at?: Date;
   updated_at?: Date;
 }
