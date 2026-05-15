@@ -1,10 +1,9 @@
 import { Request, Response } from "express";
 import UserModel from "../../../../models/users/users.model";
-import CompanyModel from "../../../../models/company/company.model";
 import generateToken from "../../../../services/generateToken/generateToken.service";
 import { ItokenPayload } from "../../../../types/interface/tokenPayload.interface";
 import { google } from "googleapis";
-import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URI } from "../../../../config/config";
+import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, NODE_ENV, REDIRECT_URI } from "../../../../config/config";
 import { SCOPES } from "../../../../services/googleAuth/GoogleAuth";
 import AuthTokenModel from "../../../../models/authToken/authToken.model";
 
@@ -16,41 +15,112 @@ const oauth2Client = new google.auth.OAuth2(
 
 export const googleSignUp = async (req: Request, res: Response) => {
   try {
-    const { user_details } = req.body;
+    const { email, full_name, profile_picture, google_id } = req.body;
 
-    const userExists = await UserModel.findOne({ email: user_details.email });
-    if (userExists) {
-      const companyInstance = await CompanyModel.findById(
-        userExists.company_object_id,
+    console.log("[googleSignUp] Request body:", { email, full_name, google_id });
+    console.log("[googleSignUp] MongoDB host:", require("mongoose").connection.host || "not connected");
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    // --- Guard: JWT_SECRET must be set ---
+    if (!process.env.JWT_SECRET) {
+      console.error("[googleSignUp] FATAL: JWT_SECRET env variable is not set");
+      return res.status(500).json({
+        success: false,
+        message: "Server misconfiguration: JWT_SECRET is not set",
+      });
+    }
+
+    // --- Find user by email (case-insensitive) ---
+    let user: any;
+    try {
+      user = await UserModel.findOne({
+        email: { $regex: new RegExp(`^${email.trim()}$`, "i") },
+      }).populate("company_details");
+      console.log(
+        "[googleSignUp] DB lookup for email:",
+        email.trim(),
+        "→",
+        user ? `Found user _id=${user._id} email=${user.email}` : "NOT FOUND in DB"
       );
+    } catch (dbError: any) {
+      console.error("[googleSignUp] DB error during findOne:", dbError.message, dbError.stack);
+      return res.status(500).json({
+        success: false,
+        message: "Database error while looking up user",
+      });
+    }
 
-      const tokenPayload: ItokenPayload = {
-        company_object_id: String(userExists.company_object_id),
-        _id: String(userExists._id),
-        role: "user",
-        full_name: userExists.full_name,
-      };
-
-      const token: string = generateToken(tokenPayload);
-
-      return res.status(200).json({
-        message: "User authenticated successfully",
+    // --- User NOT found → redirect to signup ---
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        code: "USER_NOT_FOUND",
+        message: "User not found, please complete signup",
         data: {
-          user: userExists,
-          company: companyInstance,
-          token: token,
+          user: {
+            email,
+            full_name: full_name || "",
+            profile_picture: profile_picture || "",
+            google_id: google_id || "",
+          },
         },
       });
     }
 
-    return res.status(200).json({
-      message:
-        "User google login and redirect company details page successfully",
+    // --- User EXISTS → generate JWT ---
+    let token: string;
+    try {
+      const tokenPayload: ItokenPayload = {
+        company_object_id: String(user.company_object_id),
+        _id: String(user._id),
+        role: user.role || "user",
+        full_name: user.full_name,
+      };
+      token = generateToken(tokenPayload);
+      console.log("[googleSignUp] Token generated successfully for user:", user._id);
+    } catch (tokenError: any) {
+      console.error("[googleSignUp] Token generation failed:", tokenError.message, tokenError.stack);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to generate authentication token",
+      });
+    }
+
+    // --- Sanitize user object ---
+    const userObj = user.toObject();
+    delete userObj.password;
+
+    // --- Set httpOnly cookie (identical to regular signIn) ---
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: NODE_ENV === "production",
+      sameSite: NODE_ENV === "production" ? "none" : "strict",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      ...(NODE_ENV === "production" && { domain: ".ingents.ai" }),
     });
-  } catch (error) {
-    console.error("Error during Google sign-up:", error);
+
+    console.log("[googleSignUp] Login success for:", email);
+
+    return res.status(200).json({
+      success: true,
+      code: "LOGIN_SUCCESS",
+      data: {
+        user: userObj,
+        token,
+      },
+    });
+  } catch (error: any) {
+    console.error("[googleSignUp] crashed:", error.stack || error.message);
     return res.status(500).json({
-      message: "Internal server error",
+      success: false,
+      message: error.message || "Internal server error",
     });
   }
 };

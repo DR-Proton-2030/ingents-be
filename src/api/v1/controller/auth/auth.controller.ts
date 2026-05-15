@@ -23,10 +23,29 @@ export const signUp = async (req: Request, res: Response) => {
         ? JSON.parse(req.body.user_details)
         : req.body.user_details;
 
-    const company_details =
+    const raw_company_details =
       typeof req.body.company_details === "string"
         ? JSON.parse(req.body.company_details)
         : req.body.company_details;
+
+    // Normalize company_details — map frontend field names to schema field names
+    // and convert empty strings to null for optional fields
+    const company_details = {
+      company_name: raw_company_details.company_name,
+      // frontend may send "phone" or "phone_number" — accept both
+      phone_number: raw_company_details.phone_number || raw_company_details.phone || "N/A",
+      // website is required in schema — use placeholder if frontend sends empty
+      website: raw_company_details.website?.trim() || "N/A",
+      address: raw_company_details.address?.trim() || null,
+      description: raw_company_details.description?.trim() || null,
+      industry: raw_company_details.industry?.trim() || null,
+      company_size: raw_company_details.company_size?.trim() || null,
+      contact_email: raw_company_details.contact_email?.trim() || null,
+      founding_year: raw_company_details.founding_year || null,
+      sector: raw_company_details.sector?.trim() || null,
+      services: raw_company_details.services || [],
+      products: raw_company_details.products || [],
+    };
 
     const { user_avatar, company_logo } = req.body;
 
@@ -37,7 +56,11 @@ export const signUp = async (req: Request, res: Response) => {
     if (userExists) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(409).json({ message: "User already exists" });
+      return res.status(409).json({
+        success: false,
+        code: "USER_ALREADY_EXISTS",
+        message: "An account with this email already exists. Please log in instead.",
+      });
     }
 
     console.log("===>Logo", company_logo);
@@ -50,6 +73,8 @@ export const signUp = async (req: Request, res: Response) => {
     });
     const userPayload: IUser = {
       ...user_details,
+      // default role to company_admin if not provided (signup = new company owner)
+      role: user_details.role || "company_admin",
       password: await hashPassword(user_details.password),
       company_object_id: companyInstance._id,
       profile_picture: user_avatar || null,

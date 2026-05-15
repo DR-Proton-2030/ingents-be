@@ -7,7 +7,7 @@ export const MAIL_SERVER_URL = process.env.MAIL_SERVER_URL;
 
 export const port = process.env.PORT;
 
-export const MONGO_URI = process.env.MONGO_URI;
+export const MONGO_URI = "mongodb+srv://drprotonofficial:Adarsha%40123@cluster0.9ogg6pi.mongodb.net/ingents";
 export const jwtSecret = process.env.JWT_SECRET;
 
 export const OPEN_AI_API_KEY = process.env.OPEN_AI_API_KEY;
