@@ -76,12 +76,24 @@ export const createTask = async (req: Request, res: Response) => {
     }
 
     // Parse attachments (handle multiple formats)
-    // Format 1: Array of URLs from fileUploadHelper (strings)
-    // Format 2: Array of {url, description} objects
-    // Format 3: JSON string of attachment objects
-    let parsedAttachments: TaskAttachment[] = [];
+    let parsedExistingAttachments: TaskAttachment[] = [];
+    if (req.body.existing_attachments) {
+      try {
+        const parsed = typeof req.body.existing_attachments === "string"
+          ? JSON.parse(req.body.existing_attachments)
+          : req.body.existing_attachments;
+        if (Array.isArray(parsed)) {
+          parsedExistingAttachments = parsed.map(att => ({
+            url: att.url || "",
+            description: att.description || ""
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to parse existing_attachments:", err);
+      }
+    }
 
-    // Parse attachment_descriptions if it's a JSON string
+    let parsedNewAttachments: TaskAttachment[] = [];
     let descriptions: string[] = [];
     if (Array.isArray(attachment_descriptions)) {
       descriptions = attachment_descriptions;
@@ -95,12 +107,10 @@ export const createTask = async (req: Request, res: Response) => {
     }
 
     if (Array.isArray(attachments)) {
-      parsedAttachments = attachments.map((att, index) => {
-        // If it's already an object with url property
+      parsedNewAttachments = attachments.map((att, index) => {
         if (typeof att === "object" && att.url) {
           return { url: att.url, description: att.description || "" };
         }
-        // If it's a string URL (from fileUploadHelper)
         if (typeof att === "string") {
           return { url: att, description: descriptions[index] || "" };
         }
@@ -110,27 +120,29 @@ export const createTask = async (req: Request, res: Response) => {
       try {
         const parsed = JSON.parse(attachments);
         if (Array.isArray(parsed)) {
-          parsedAttachments = parsed.map((att, index) => {
+          parsedNewAttachments = parsed.map((att, index) => {
             if (typeof att === "object" && att.url) {
               return { url: att.url, description: att.description || "" };
             }
             return { url: String(att), description: descriptions[index] || "" };
           });
         } else if (typeof parsed === "object" && parsed.url) {
-          parsedAttachments = [
+          parsedNewAttachments = [
             { url: parsed.url, description: parsed.description || "" },
           ];
         } else {
-          parsedAttachments = [
+          parsedNewAttachments = [
             { url: attachments, description: descriptions[0] || "" },
           ];
         }
       } catch {
-        parsedAttachments = [
+        parsedNewAttachments = [
           { url: attachments, description: descriptions[0] || "" },
         ];
       }
     }
+
+    const parsedAttachments = [...parsedExistingAttachments, ...parsedNewAttachments];
 
     // Parse tag_object_ids
     let parsedTags: string[] = [];
@@ -610,8 +622,25 @@ export const editTask = async (req: Request, res: Response) => {
     console.log(tag_object_id_list);
 
     // Parse attachments if they exist in the update request
-    if (attachments !== undefined) {
-      let parsedAttachments: TaskAttachment[] = [];
+    if (attachments !== undefined || req.body.existing_attachments !== undefined) {
+      let parsedExistingAttachments: TaskAttachment[] = [];
+      if (req.body.existing_attachments) {
+        try {
+          const parsed = typeof req.body.existing_attachments === "string"
+            ? JSON.parse(req.body.existing_attachments)
+            : req.body.existing_attachments;
+          if (Array.isArray(parsed)) {
+            parsedExistingAttachments = parsed.map(att => ({
+              url: att.url || "",
+              description: att.description || ""
+            }));
+          }
+        } catch (err) {
+          console.error("Failed to parse existing_attachments:", err);
+        }
+      }
+
+      let parsedNewAttachments: TaskAttachment[] = [];
       let descriptions: string[] = [];
 
       if (Array.isArray(attachment_descriptions)) {
@@ -626,7 +655,7 @@ export const editTask = async (req: Request, res: Response) => {
       }
 
       if (Array.isArray(attachments)) {
-        parsedAttachments = attachments.map((att, index) => {
+        parsedNewAttachments = attachments.map((att, index) => {
           if (typeof att === "object" && att.url) {
             return { url: att.url, description: att.description || "" };
           }
@@ -639,32 +668,29 @@ export const editTask = async (req: Request, res: Response) => {
         try {
           const parsed = JSON.parse(attachments);
           if (Array.isArray(parsed)) {
-            parsedAttachments = parsed.map((att, index) => {
+            parsedNewAttachments = parsed.map((att, index) => {
               if (typeof att === "object" && att.url) {
                 return { url: att.url, description: att.description || "" };
               }
-              return {
-                url: String(att),
-                description: descriptions[index] || "",
-              };
+              return { url: String(att), description: descriptions[index] || "" };
             });
           } else if (typeof parsed === "object" && parsed.url) {
-            parsedAttachments = [
+            parsedNewAttachments = [
               { url: parsed.url, description: parsed.description || "" },
             ];
           } else {
-            parsedAttachments = [
+            parsedNewAttachments = [
               { url: attachments, description: descriptions[0] || "" },
             ];
           }
         } catch {
-          parsedAttachments = [
+          parsedNewAttachments = [
             { url: attachments, description: descriptions[0] || "" },
           ];
         }
       }
 
-      updateData.attachments = parsedAttachments;
+      updateData.attachments = [...parsedExistingAttachments, ...parsedNewAttachments];
     }
 
     // Parse tag_object_ids if provided
