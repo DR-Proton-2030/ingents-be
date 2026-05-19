@@ -9,6 +9,14 @@ export interface TaskAttachment {
   description?: string;
 }
 
+export interface TaskComment {
+  id: string;
+  author: string;
+  avatar?: string;
+  time: string;
+  text: string;
+}
+
 export interface Task {
   title: string;
   completed: boolean;
@@ -33,4 +41,5 @@ export interface Task {
   tag_object_ids?: SchemaDefinitionProperty<Types.ObjectId>[];
   tags_info?: ITag[];
   project_object_id?: SchemaDefinitionProperty<Types.ObjectId> | null;
+  comments?: TaskComment[];
 }

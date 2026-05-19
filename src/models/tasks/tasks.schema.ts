@@ -40,6 +40,18 @@ export const taskSchema: Schema<Task> = new Schema<Task>(
       type: [{ type: Schema.Types.ObjectId, ref: "Tags" }],
       default: [],
     },
+    comments: {
+      type: [
+        {
+          id: { type: String, required: true },
+          author: { type: String, required: true },
+          avatar: { type: String },
+          time: { type: String, required: true },
+          text: { type: String, required: true },
+        },
+      ],
+      default: [],
+    },
     project_object_id: SCHEMA_DEFINITION_PROPERTY.optionalNullObjectId,
   },
   {
