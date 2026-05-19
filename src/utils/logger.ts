@@ -7,7 +7,7 @@ export const styles = {
 	dim: "\x1b[2m",
 	italic: "\x1b[3m",
 	underline: "\x1b[4m",
-	
+
 	// Foreground Colors
 	black: "\x1b[30m",
 	red: "\x1b[31m",
@@ -18,7 +18,7 @@ export const styles = {
 	cyan: "\x1b[36m",
 	white: "\x1b[37m",
 	gray: "\x1b[90m",
-	
+
 	// Premium 256 colors
 	orange: "\x1b[38;5;208m",
 	purple: "\x1b[38;5;99m",
@@ -27,7 +27,7 @@ export const styles = {
 	gold: "\x1b[38;5;220m",
 	mint: "\x1b[38;5;121m",
 	sky: "\x1b[38;5;117m",
-	
+
 	// Background Colors
 	bgRed: "\x1b[41m",
 	bgGreen: "\x1b[42m",
@@ -60,11 +60,11 @@ export function printStartupDashboard(port: number, mongoUri: string) {
 	const gray = "\x1b[90m";
 	const white = "\x1b[37m";
 
-	const boxWidth = 60;
-	const topBorder = `${borderStyle}  ╔${"═".repeat(boxWidth - 2)}╗${reset}`;
+	// Compensate for ⚡ (visual-double, JS-single): Top/Bottom border = 58 columns
+	const topBorder = `${borderStyle}  ╔${"═".repeat(58)}╗${reset}`;
 	const content = "⚡  INGENTS INTELLIGENCE SYSTEM ACTIVE ⚡";
-	const middleLine = `${borderStyle}  ║        ${textStyle}${styles.bold}${content}${reset}${borderStyle}        ║${reset}`;
-	const bottomBorder = `${borderStyle}  ╚${"═".repeat(boxWidth - 2)}╝${reset}`;
+	const middleLine = `${borderStyle}  ║        ${textStyle}${styles.bold}${content}${reset}${borderStyle}         ║${reset}`;
+	const bottomBorder = `${borderStyle}  ╚${"═".repeat(58)}╝${reset}`;
 
 	const mode = process.env.NODE_ENV || "development";
 	const apiUrl = `http://localhost:${port}/api`;
@@ -80,7 +80,7 @@ export function printStartupDashboard(port: number, mongoUri: string) {
 			const hostAndDb = parts.length > 1 ? parts[1] : parts[0];
 			const hostDbParts = hostAndDb.split("/");
 			cluster = hostDbParts[0].split(",")[0];
-			
+
 			if (hostDbParts.length > 1) {
 				const dbQueryParts = hostDbParts[1].split("?");
 				dbName = dbQueryParts[0] || "ingents";
@@ -124,15 +124,15 @@ export function printRedisDashboard(status: typeof loadedServices) {
 	const gray = "\x1b[90m";
 	const white = "\x1b[37m";
 
-	const boxWidth = 60;
-	const topBorder = `${borderStyle}  ╔${"═".repeat(boxWidth - 2)}╗${reset}`;
+	// Compensate for 📡 (visual-single, JS-double): Top/Bottom border = 56 columns
+	const topBorder = `${borderStyle}  ╔${"═".repeat(56)}╗${reset}`;
 	const content = "📡  REDIS & WORKER SERVICES INITIALIZED 📡";
-	const middleLine = `${borderStyle}  ║       ${textStyle}${styles.bold}${content}${reset}${borderStyle}        ║${reset}`;
-	const bottomBorder = `${borderStyle}  ╚${"═".repeat(boxWidth - 2)}╝${reset}`;
+	const middleLine = `${borderStyle}  ║       ${textStyle}${styles.bold}${content}${reset}${borderStyle}       ║${reset}`;
+	const bottomBorder = `${borderStyle}  ╚${"═".repeat(56)}╝${reset}`;
 
 	const rawLog = (global as any).__originalConsole?.log || console.log;
 
-	const getStatusIndicator = (active: boolean) => 
+	const getStatusIndicator = (active: boolean) =>
 		active ? `\x1b[38;5;85mOnline${reset} 🟢` : `\x1b[31mOffline${reset} 🔴`;
 
 	const getWorkerIndicator = (active: boolean, name: string) =>
@@ -170,7 +170,7 @@ export class Logger {
 	static log(prefix: string, message: any, ...args: any[]) {
 		const formattedMsg = typeof message === "string" ? message : util.inspect(message, { colors: true, depth: 3 });
 		const formattedArgs = args.map(arg => typeof arg === "string" ? arg : util.inspect(arg, { colors: true, depth: 3 }));
-		
+
 		process.stdout.write(
 			`${getTimestamp()} ${prefix} ${formattedMsg} ${formattedArgs.join(" ")}\n`
 		);
