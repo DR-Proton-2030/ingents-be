@@ -66,6 +66,13 @@ export function printStartupDashboard(port: number, mongoUri: string) {
 	const middleLine = `${borderStyle}  ║        ${textStyle}${styles.bold}${content}${reset}${borderStyle}         ║${reset}`;
 	const bottomBorder = `${borderStyle}  ╚${"═".repeat(58)}╝${reset}`;
 
+	const dbBorderStyle = "\x1b[38;5;85m"; // Vibrant Mint/Green (Neon)
+	const dbTextStyle = "\x1b[1;32m"; // Green Bold
+	const dbTopBorder = `${dbBorderStyle}  ╔${"═".repeat(56)}╗${reset}`;
+	const dbContent = "🌱  DATABASE CONNECTION ESTABLISHED 🌱";
+	const dbMiddleLine = `${dbBorderStyle}  ║        ${dbTextStyle}${styles.bold}${dbContent}${reset}${dbBorderStyle}          ║${reset}`;
+	const dbBottomBorder = `${dbBorderStyle}  ╚${"═".repeat(56)}╝${reset}`;
+
 	const mode = process.env.NODE_ENV || "development";
 	const apiUrl = `http://localhost:${port}/api`;
 
@@ -100,10 +107,13 @@ export function printStartupDashboard(port: number, mongoUri: string) {
 	rawLog(`  ${white}● Mode:        ${styles.bold}\x1b[38;5;213m${mode}${reset}`);
 	rawLog(`  ${white}● API URL:     ${styles.bold}\x1b[38;5;117m${apiUrl}${reset}`);
 	rawLog(`  ${gray}──────────────────────────────────────────────────────────────────────────${reset}\n`);
-	rawLog(`  \x1b[38;5;85m🌱  DATABASE CONNECTION ESTABLISHED${reset}`);
-	rawLog(`  ${white}├── Status    >  ${styles.bold}\x1b[38;5;85mOnline${reset} 🟢`);
-	rawLog(`  ${white}├── Cluster   >  ${styles.bold}\x1b[38;5;117m${cluster}${reset}`);
-	rawLog(`  ${white}└── Database  >  ${styles.bold}\x1b[38;5;220m${dbName}${reset}\n`);
+	rawLog(dbTopBorder);
+	rawLog(dbMiddleLine);
+	rawLog(dbBottomBorder);
+	rawLog(`  ${white}● Database Status:  ${styles.bold}\x1b[38;5;85mOnline${reset} 🟢`);
+	rawLog(`  ${white}● MongoDB Cluster:  ${styles.bold}\x1b[38;5;117m${cluster}${reset}`);
+	rawLog(`  ${white}● Database Name:    ${styles.bold}\x1b[38;5;220m${dbName}${reset}`);
+	rawLog(`  ${gray}──────────────────────────────────────────────────────────────────────────${reset}\n`);
 }
 
 // REDIS & WORKER SERVICES STATE MACHINE
@@ -118,8 +128,8 @@ let redisDashboardPrinted = false;
 let timeoutHandle: NodeJS.Timeout | null = null;
 
 export function printRedisDashboard(status: typeof loadedServices) {
-	const borderStyle = "\x1b[38;5;39m"; // Match main system neon blue style!
-	const textStyle = "\x1b[1;36m"; // Cyan Bold
+	const borderStyle = "\x1b[38;5;129m"; // Vibrant Purple (Neon)
+	const textStyle = "\x1b[1;35m"; // Magenta Bold
 	const reset = "\x1b[0m";
 	const gray = "\x1b[90m";
 	const white = "\x1b[37m";
@@ -226,6 +236,11 @@ function parseAndPrettify(args: any[]): { prefix: string; formattedArgs: any[]; 
 	if (typeof firstArg === "string") {
 		// Clean ANSI codes first to match text cleanly
 		const cleanText = firstArg.replace(/\x1b\[[0-9;]*m/g, "").trim();
+
+		// Match and completely silence dotenv / dotenvx environment loading noise
+		if (cleanText.includes("[dotenv@") || cleanText.includes("injecting env")) {
+			return { prefix: "", formattedArgs: [], silence: true };
+		}
 
 		// Match Server Listener
 		if (cleanText.includes("Ingents Server is listening at")) {
