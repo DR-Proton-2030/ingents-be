@@ -14,6 +14,13 @@ taskRouter.post(
   fileUploadHelper,
   createTask
 );
+taskRouter.post(
+  "/add-task",
+  userAuth,
+  upload.fields([{ name: "attachments", maxCount: 10 }]),
+  fileUploadHelper,
+  createTask
+);
 taskRouter.get("/get-tasks", userAuth, getTasks);
 taskRouter.patch("/update-task-status/:taskId", userAuth, updateTaskStatus);
 
