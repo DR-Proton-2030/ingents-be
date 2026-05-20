@@ -286,6 +286,7 @@ export const getTasks = async (req: Request, res: Response) => {
       sort_by,
       sort_order,
       project_object_id,
+      query,
     } = req.query;
 
     const currentPage = Number(page) || 1;
@@ -296,6 +297,14 @@ export const getTasks = async (req: Request, res: Response) => {
 
     // Build dynamic filter
     const filter: any = { company_object_id: company_object_id! };
+
+    // Filter by search query (title or description)
+    if (query) {
+      filter.$or = [
+        { title: { $regex: query, $options: "i" } },
+        { description: { $regex: query, $options: "i" } }
+      ];
+    }
 
     // Filter by "My Tasks" - tasks assigned to the logged-in user (takes priority)
     if (my_tasks === "true") {
@@ -371,6 +380,7 @@ export const getTasks = async (req: Request, res: Response) => {
             : null,
         my_tasks: my_tasks === "true",
         project_object_id: project_object_id || null,
+        query: query || null,
       },
     });
   } catch (error) {
