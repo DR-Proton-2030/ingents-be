@@ -2,31 +2,28 @@ import mongoose from "mongoose";
 
 const USE_LOCAL = process.env.USE_LOCAL_MONGO === "true";
 
-// Used on Railway — set MONGO_URI env var in Railway dashboard
-const ATLAS_SRV_URI =
-  "mongodb+srv://drprotonofficial:Adarsha%40123@cluster0.9ogg6pi.mongodb.net/ingents?retryWrites=true&w=majority";
-
 // Local dev fallback — directConnection bypasses SRV DNS (blocked by some ISPs/firewalls).
-// Points to shard-00-01 which is the current PRIMARY node (run scratch/find-primary.js to recheck).
+// Points to shard-00-02 which is the current PRIMARY node (run scratch/find-primary.js to recheck).
 const ATLAS_DIRECT_URI =
-  "mongodb://drprotonofficial:Adarsha%40123@ac-mvd5iid-shard-00-01.9ogg6pi.mongodb.net:27017/ingents?ssl=true&authSource=admin&directConnection=true";
+  "mongodb://drprotonofficial:Adarsha%40123@ac-mvd5iid-shard-00-02.9ogg6pi.mongodb.net:27017/ingents?ssl=true&authSource=admin&directConnection=true";
 
 const LOCAL_URI = "mongodb://localhost:27017/ingents";
 
-// Priority: USE_LOCAL → MONGO_URI env var (Railway) → direct URI (local dev)
+// Priority:
+// 1. USE_LOCAL_MONGO=true  → local MongoDB
+// 2. MONGO_URI env var set → use it directly (Railway SRV or any custom URI)
+// 3. fallback              → direct shard connection for local dev (SRV DNS blocked)
 const MONGO_URI = USE_LOCAL
   ? LOCAL_URI
-  : process.env.MONGO_URI
-  ? ATLAS_SRV_URI
-  : ATLAS_DIRECT_URI;
+  : process.env.MONGO_URI || ATLAS_DIRECT_URI;
 
 const connectDb = async () => {
   try {
     const label = USE_LOCAL
       ? "LOCAL"
       : process.env.MONGO_URI
-      ? "ATLAS SRV (Railway)"
-      : "ATLAS direct (local dev)";
+      ? "ATLAS (env MONGO_URI)"
+      : "ATLAS direct (local dev fallback)";
     console.log(`Connecting to MongoDB (${label})...`);
     const conn = await mongoose.connect(MONGO_URI, {
       serverSelectionTimeoutMS: 20000,

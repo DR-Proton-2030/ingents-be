@@ -37,4 +37,10 @@ export interface IUser {
     access_token: string;
     waba_id?: string;
   };
+  memories?: string[];
+  memory?: Array<{
+    _id?: string;
+    text: string;
+    createdAt?: Date;
+  }>;
 }

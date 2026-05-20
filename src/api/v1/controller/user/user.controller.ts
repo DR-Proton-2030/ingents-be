@@ -148,7 +148,12 @@ export const getAttendanceStats = async (req: Request, res: Response) => {
 
 export const updateUser = async (req: Request, res: Response) => {
   try {
-    const { userId, ...payload } = req.body;
+    const { userId: bodyUserId, ...payload } = req.body;
+    console.log("[updateUser] body keys:", Object.keys(req.body));
+    console.log("[updateUser] memories received:", JSON.stringify(payload.memories));
+
+    // Use userId from body if provided, otherwise fall back to the authenticated user's ID
+    const userId = bodyUserId || req.user?._id;
 
     if (!userId) {
       return res.status(400).json({ message: "Missing userId" });
@@ -158,6 +163,23 @@ export const updateUser = async (req: Request, res: Response) => {
       payload.password = await hashPassword(payload.password);
     }
 
+    // Normalize memories — ensure it's always a proper string array
+    // (FormData can serialize arrays as objects like { "0": "val" })
+    if (payload.memories !== undefined) {
+      if (Array.isArray(payload.memories)) {
+        // Already an array — keep as-is
+        payload.memories = payload.memories.map(String);
+      } else if (typeof payload.memories === "object" && payload.memories !== null) {
+        // Object with numeric keys e.g. { "0": "val", "1": "val2" } → convert to array
+        payload.memories = Object.values(payload.memories).map(String);
+      } else if (typeof payload.memories === "string") {
+        // Single string — wrap in array
+        payload.memories = [payload.memories];
+      } else {
+        payload.memories = [];
+      }
+    }
+
     // Fetch existing user to merge nested objects
     const existingUser = await UserModel.findById(userId);
     if (!existingUser) {
@@ -165,12 +187,15 @@ export const updateUser = async (req: Request, res: Response) => {
     }
 
     // Merge nested objects like facebook, instagram, etc.
+    // Skip arrays (like memories) — they should be replaced, not merged
     for (const key of Object.keys(payload)) {
       if (
+        !Array.isArray(payload[key]) &&          // ← skip arrays
         typeof payload[key] === "object" &&
         payload[key] !== null &&
         (existingUser as any)[key] &&
-        typeof (existingUser as any)[key] === "object"
+        typeof (existingUser as any)[key] === "object" &&
+        !Array.isArray((existingUser as any)[key]) // ← skip if existing is also array
       ) {
         const existingVal = (existingUser as any)[key];
         payload[key] = {
@@ -187,6 +212,8 @@ export const updateUser = async (req: Request, res: Response) => {
       { $set: payload },
       { new: true }
     );
+
+    console.log("[updateUser] Saved memories:", (updatedUser as any)?.memories);
 
     return res.status(200).json({
       message: "User updated successfully",
