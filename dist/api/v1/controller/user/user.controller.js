@@ -85,37 +85,39 @@ const getAttendanceStats = (req, res) => __awaiter(void 0, void 0, void 0, funct
         const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-        // Current month attendances
+        // Current month attendances with user details
         const currentAttendances = yield attendance_model_1.default.find({
             company_object_id,
             createdAt: { $gte: startOfCurrentMonth }
-        });
+        }).populate("user_object_id", "full_name profile_picture");
         // Previous month attendances (for percentage calculation)
         const prevAttendances = yield attendance_model_1.default.find({
             company_object_id,
             createdAt: { $gte: startOfPrevMonth, $lte: endOfPrevMonth }
         });
         // 5 Weeks x 7 Days grid
-        const rawGridCounts = Array.from({ length: 5 }, () => Array(7).fill(0));
+        // Store array of attendees per cell
+        const rawGridData = Array.from({ length: 5 }, () => Array.from({ length: 7 }, () => ({ attendees: [] })));
         currentAttendances.forEach(att => {
             const date = att.createdAt;
             if (!date)
                 return;
             const dayOfMonth = date.getDate();
             const dayOfWeek = date.getDay(); // 0-6
-            // Calculate week index (roughly)
-            // We'll use: Math.floor((dayOfMonth - 1 + startOfCurrentMonth.getDay()) / 7)
             const firstDayOffset = startOfCurrentMonth.getDay();
             const weekIndex = Math.floor((dayOfMonth - 1 + firstDayOffset) / 7);
             if (weekIndex < 5) {
-                rawGridCounts[weekIndex][dayOfWeek] += 1;
+                if (att.user_object_id) {
+                    rawGridData[weekIndex][dayOfWeek].attendees.push(att.user_object_id);
+                }
             }
         });
         const gridData = [];
         for (let r = 0; r < 5; r++) {
             const rowArr = [];
             for (let c = 0; c < 7; c++) {
-                const count = rawGridCounts[r][c];
+                const attendees = rawGridData[r][c].attendees;
+                const count = attendees.length;
                 let intensity = 0;
                 if (totalUsers > 0 && count > 0) {
                     const percent = count / totalUsers;
@@ -128,7 +130,7 @@ const getAttendanceStats = (req, res) => __awaiter(void 0, void 0, void 0, funct
                     else
                         intensity = 4;
                 }
-                rowArr.push({ count, intensity });
+                rowArr.push({ count, intensity, attendees });
             }
             gridData.push(rowArr);
         }

@@ -17,11 +17,9 @@ const config_1 = require("./config");
 const connectDb = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
         if (config_1.MONGO_URI) {
-            const conn = yield mongoose_1.default.connect(config_1.MONGO_URI, {
+            yield mongoose_1.default.connect(config_1.MONGO_URI, {
                 serverSelectionTimeoutMS: 40000
             });
-            console.log("Second Connection -->", config_1.MONGO_URI);
-            console.log(`\x1b[34m \x1b[1m \x1b[4mMongoDB Connected: ${conn.connection.port}\x1b[0m`);
         }
     }
     catch (err) {

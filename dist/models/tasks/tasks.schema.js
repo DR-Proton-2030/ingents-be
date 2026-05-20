@@ -39,6 +39,18 @@ exports.taskSchema = new mongoose_1.Schema({
         type: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "Tags" }],
         default: [],
     },
+    comments: {
+        type: [
+            {
+                id: { type: String, required: true },
+                author: { type: String, required: true },
+                avatar: { type: String },
+                time: { type: String, required: true },
+                text: { type: String, required: true },
+            },
+        ],
+        default: [],
+    },
     project_object_id: model_constant_1.default.optionalNullObjectId,
 }, Object.assign(Object.assign({}, schemaOption_1.GENERAL_SCHEMA_OPTIONS), { toJSON: { virtuals: true }, toObject: { virtuals: true } }));
 const UserVirtualReference = {

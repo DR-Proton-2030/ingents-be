@@ -8,36 +8,30 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.uploadBase64ToS3 = exports.uploadFileToS3Service = void 0;
-const client_s3_1 = require("@aws-sdk/client-s3");
-const mime_types_1 = __importDefault(require("mime-types")); // Import mime-types
-const aws_config_1 = require("../../config/aws.config");
+const cloudinary_1 = require("cloudinary");
+cloudinary_1.v2.config({
+    cloud_name: "dshnaupn3",
+    api_key: "864747813873585",
+    api_secret: "7HKMuo1h1ia6z3iWS1fHHcO1b1A"
+});
 const uploadFileToS3Service = (key, fileBuffer, mimeType) => __awaiter(void 0, void 0, void 0, function* () {
-    // Determine correct file extension from MIME type
-    const ext = mime_types_1.default.extension(mimeType) || "bin"; // Fallback to .bin if unknown
-    const keyName = `${key}/${Date.now()}.${ext}`; // Correctly name the file
-    const command = new client_s3_1.PutObjectCommand({
-        Bucket: aws_config_1.bucketName,
-        Key: keyName,
-        Body: fileBuffer,
-        ACL: "public-read",
-        ContentType: mimeType, // Ensure correct MIME type is set
+    return new Promise((resolve) => {
+        const uploadStream = cloudinary_1.v2.uploader.upload_stream({
+            folder: key,
+            resource_type: "auto",
+        }, (error, result) => {
+            if (error) {
+                console.error("Cloudinary upload error:", error);
+                resolve(null);
+            }
+            else {
+                resolve((result === null || result === void 0 ? void 0 : result.secure_url) || null);
+            }
+        });
+        uploadStream.end(fileBuffer);
     });
-    try {
-        const response = yield aws_config_1.s3Client.send(command);
-        console.log(response);
-        if (response) {
-            return `${aws_config_1.s3Url}/${keyName}`; // Return correct S3 URL
-        }
-        return null;
-    }
-    catch (err) {
-        console.error(err);
-    }
 });
 exports.uploadFileToS3Service = uploadFileToS3Service;
 const uploadBase64ToS3 = (base64_1, key_1, ...args_1) => __awaiter(void 0, [base64_1, key_1, ...args_1], void 0, function* (base64, key, mimeType = "image/png") {

@@ -7,7 +7,7 @@ const mongoose_1 = require("mongoose");
 const model_constant_1 = __importDefault(require("../../constants/model/model.constant"));
 const schemaOption_1 = require("../../constants/model/schemaOption");
 const attendanceSchema = new mongoose_1.Schema({
-    user_object_id: model_constant_1.default.requiredObjectId,
+    user_object_id: Object.assign(Object.assign({}, model_constant_1.default.requiredObjectId), { ref: "users" }),
     company_object_id: model_constant_1.default.requiredObjectId,
     date: model_constant_1.default.requiredString,
 }, Object.assign({}, schemaOption_1.GENERAL_SCHEMA_OPTIONS));

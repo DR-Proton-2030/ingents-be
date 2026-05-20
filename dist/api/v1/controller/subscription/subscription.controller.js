@@ -13,7 +13,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getPlans = exports.getPaymentHistory = exports.downgradeToFree = exports.cancelSubscription = exports.verifyPayment = exports.createSubscriptionOrder = exports.getCurrentSubscription = void 0;
-const mongoose_1 = require("mongoose");
 const subscription_model_1 = __importDefault(require("../../../../models/subscription/subscription.model"));
 const payment_model_1 = __importDefault(require("../../../../models/payment/payment.model"));
 const razorpay_service_1 = require("../../../../services/razorpay/razorpay.service");
@@ -21,34 +20,34 @@ const subscription_worker_1 = require("../../../../services/subscription/subscri
 const subscription_interface_1 = require("../../../../types/interface/subscription.interface");
 /**
  * Helper: get or create the single subscription doc for a company.
- * Uses findOneAndUpdate with upsert + duplicate key error handling
- * to guarantee exactly one document per company.
+ * Lets Mongoose handle ObjectId casting via the schema definition.
  */
 function getOrCreateCompanySubscription(companyId) {
     return __awaiter(this, void 0, void 0, function* () {
-        const companyOid = new mongoose_1.Types.ObjectId(companyId);
+        // First, try to find existing subscription
+        let sub = yield subscription_model_1.default.findOne({ company_id: companyId });
+        if (sub)
+            return sub;
+        // No subscription exists — create one
         const now = new Date();
         const periodEnd = new Date(now);
         periodEnd.setMonth(periodEnd.getMonth() + 1);
         try {
-            // upsert: if no doc exists for this company, create a free one
-            const sub = yield subscription_model_1.default.findOneAndUpdate({ company_id: companyOid }, {
-                $setOnInsert: {
-                    company_id: companyOid,
-                    plan: "free",
-                    status: "active",
-                    amount: 0,
-                    currency: "INR",
-                    current_period_start: now,
-                    current_period_end: periodEnd,
-                },
-            }, { new: true, upsert: true });
+            sub = yield subscription_model_1.default.create({
+                company_id: companyId,
+                plan: "free",
+                status: "active",
+                amount: 0,
+                currency: "INR",
+                current_period_start: now,
+                current_period_end: periodEnd,
+            });
             return sub;
         }
         catch (err) {
-            // E11000 duplicate key = another request created it first, just fetch it
+            // E11000 = another request created it first (race condition), just fetch it
             if (err.code === 11000) {
-                return subscription_model_1.default.findOne({ company_id: companyOid });
+                return subscription_model_1.default.findOne({ company_id: companyId });
             }
             throw err;
         }
@@ -98,7 +97,7 @@ const createSubscriptionOrder = (req, res) => __awaiter(void 0, void 0, void 0, 
         // Create payment record
         const payment = yield payment_model_1.default.create({
             user_id: userId,
-            company_id: new mongoose_1.Types.ObjectId(companyId),
+            company_id: companyId,
             subscription_id: subscription._id,
             razorpay_order_id: order.id,
             amount: planConfig.price,
@@ -159,8 +158,7 @@ const verifyPayment = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         const now = new Date();
         const periodEnd = new Date(now);
         periodEnd.setMonth(periodEnd.getMonth() + 1);
-        const companyOid = new mongoose_1.Types.ObjectId(companyId);
-        const subscription = yield subscription_model_1.default.findOneAndUpdate({ company_id: companyOid }, {
+        const subscription = yield subscription_model_1.default.findOneAndUpdate({ company_id: companyId }, {
             plan: plan,
             status: "active",
             amount: subscription_interface_1.PLAN_CONFIG[plan].price,
@@ -196,9 +194,8 @@ exports.verifyPayment = verifyPayment;
 const cancelSubscription = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const companyId = req.user.company_object_id;
-        const companyOid = new mongoose_1.Types.ObjectId(companyId);
         const subscription = yield subscription_model_1.default.findOne({
-            company_id: companyOid,
+            company_id: companyId,
             status: "active",
         });
         if (!subscription) {
@@ -235,11 +232,10 @@ exports.cancelSubscription = cancelSubscription;
 const downgradeToFree = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const companyId = req.user.company_object_id;
-        const companyOid = new mongoose_1.Types.ObjectId(companyId);
         const now = new Date();
         const periodEnd = new Date(now);
         periodEnd.setMonth(periodEnd.getMonth() + 1);
-        const subscription = yield subscription_model_1.default.findOneAndUpdate({ company_id: companyOid }, {
+        const subscription = yield subscription_model_1.default.findOneAndUpdate({ company_id: companyId }, {
             plan: "free",
             status: "active",
             amount: 0,
@@ -266,8 +262,7 @@ exports.downgradeToFree = downgradeToFree;
 const getPaymentHistory = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const companyId = req.user.company_object_id;
-        const companyOid = new mongoose_1.Types.ObjectId(companyId);
-        const payments = yield payment_model_1.default.find({ company_id: companyOid })
+        const payments = yield payment_model_1.default.find({ company_id: companyId })
             .sort({ createdAt: -1 })
             .limit(50)
             .lean();
